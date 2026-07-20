@@ -1,6 +1,8 @@
 import argparse
+import json
 import os
 import smtplib
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime
 from email.message import EmailMessage
@@ -20,6 +22,14 @@ class Quote:
     volume: Optional[float]
     avg_volume_20d: Optional[float]
     close_history: Any
+
+
+@dataclass
+class SentimentIndex:
+    name: str
+    value: int
+    classification: str
+    timestamp: str
 
 
 def load_config(path: str) -> Dict[str, Any]:
@@ -63,6 +73,19 @@ def fetch_quote(ticker: str) -> Quote:
         volume=current_volume,
         avg_volume_20d=avg_volume_20d,
         close_history=close,
+    )
+
+
+def fetch_crypto_fear_greed() -> SentimentIndex:
+    url = "https://api.alternative.me/fng/?limit=1"
+    with urllib.request.urlopen(url, timeout=20) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    item = payload["data"][0]
+    return SentimentIndex(
+        name="Crypto Fear & Greed",
+        value=int(item["value"]),
+        classification=item["value_classification"],
+        timestamp=item.get("timestamp", ""),
     )
 
 
@@ -178,6 +201,45 @@ def check_indicator_rules(indicator: Dict[str, Any], quote: Quote) -> List[str]:
     return alerts
 
 
+def check_sentiment_index_rules(indicator: Dict[str, Any], sentiment: SentimentIndex) -> List[str]:
+    alerts: List[str] = []
+    rules = indicator.get("rules", {})
+    name = indicator["name"]
+
+    extreme_fear = rules.get("extreme_fear_below")
+    if extreme_fear is not None and sentiment.value <= extreme_fear:
+        alerts.append(
+            bilingual(
+                f"{name} 进入极度恐慌区：当前 {sentiment.value} ({sentiment.classification})，阈值 <= {extreme_fear}。",
+                f"{name} is in extreme-fear territory: current {sentiment.value} ({sentiment.classification}), threshold <= {extreme_fear}.",
+            )
+        )
+
+    fear_watch = rules.get("fear_watch_below")
+    if fear_watch is not None and sentiment.value <= fear_watch:
+        alerts.append(
+            bilingual(
+                f"{name} 进入恐慌观察区：当前 {sentiment.value} ({sentiment.classification})，阈值 <= {fear_watch}。",
+                f"{name} is in fear-watch territory: current {sentiment.value} ({sentiment.classification}), threshold <= {fear_watch}.",
+            )
+        )
+
+    extreme_greed = rules.get("extreme_greed_above")
+    if extreme_greed is not None and sentiment.value >= extreme_greed:
+        alerts.append(
+            bilingual(
+                f"{name} 进入极度贪婪区：当前 {sentiment.value} ({sentiment.classification})，阈值 >= {extreme_greed}。",
+                f"{name} is in extreme-greed territory: current {sentiment.value} ({sentiment.classification}), threshold >= {extreme_greed}.",
+            )
+        )
+
+    return alerts
+
+
+def sentiment_snapshot(sentiment: SentimentIndex) -> str:
+    return f"数值/Value: {sentiment.value}; 状态/Classification: {sentiment.classification}"
+
+
 def stock_by_name(config: Dict[str, Any], name: str) -> Optional[Dict[str, Any]]:
     for stock in config.get("stocks", []):
         if stock.get("name") == name:
@@ -256,16 +318,24 @@ def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote])
         return []
 
     global_rules = config.get("global_rules", {})
-    stocks = [stock for stock in config.get("stocks", []) if stock.get("position", 0) > 0]
+    all_stocks = config.get("stocks", [])
+    sell_stocks = [stock for stock in all_stocks if stock.get("position", 0) > 0]
+    buy_stocks = [
+        stock
+        for stock in all_stocks
+        if stock.get("position", 0) > 0 or stock.get("rotation", {}).get("allow_as_target_when_not_held")
+    ]
     sell_candidates: List[Tuple[Dict[str, Any], Quote, List[str]]] = []
     buy_candidates: List[Tuple[Dict[str, Any], Quote, List[str]]] = []
 
-    for stock in stocks:
+    for stock in sell_stocks:
         quote = get_quote(stock["ticker"], quote_cache)
         sell_reasons = sell_strength_reasons(stock, quote, global_rules)
         if sell_reasons:
             sell_candidates.append((stock, quote, sell_reasons))
 
+    for stock in buy_stocks:
+        quote = get_quote(stock["ticker"], quote_cache)
         buy_reasons = buy_opportunity_reasons(stock, quote, global_rules)
         if buy_reasons:
             buy_candidates.append((stock, quote, buy_reasons))
@@ -419,11 +489,18 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
     indicator_alerts: List[str] = []
     for indicator in config.get("market_indicators", []):
         try:
-            quote = get_quote(indicator["ticker"], quote_cache)
-            alerts = check_indicator_rules(indicator, quote)
-            triggered = triggered or bool(alerts)
-            for alert in alerts:
-                indicator_alerts.append(f"{indicator['name']} ({indicator['ticker']})\n{alert}\n{quote_snapshot(quote)}")
+            if indicator.get("type") == "crypto_fear_greed":
+                sentiment = fetch_crypto_fear_greed()
+                alerts = check_sentiment_index_rules(indicator, sentiment)
+                triggered = triggered or bool(alerts)
+                for alert in alerts:
+                    indicator_alerts.append(f"{indicator['name']} ({indicator['ticker']})\n{alert}\n{sentiment_snapshot(sentiment)}")
+            else:
+                quote = get_quote(indicator["ticker"], quote_cache)
+                alerts = check_indicator_rules(indicator, quote)
+                triggered = triggered or bool(alerts)
+                for alert in alerts:
+                    indicator_alerts.append(f"{indicator['name']} ({indicator['ticker']})\n{alert}\n{quote_snapshot(quote)}")
         except Exception as exc:
             triggered = True
             indicator_alerts.append(

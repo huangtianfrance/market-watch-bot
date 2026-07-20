@@ -6,6 +6,7 @@ It checks your watchlist on a schedule and emails you when a rule is triggered:
 
 - a held stock rises sharply
 - VIX reaches extreme fear or extreme greed / complacency
+- Crypto Fear & Greed reaches extreme fear or extreme greed
 - a held stock trades near its 1-year, 3-year, or 5-year low
 - a possible market-confirmed fundamental re-rating appears, defined as a strong positive price move with unusual volume
 
@@ -24,6 +25,9 @@ The default rules in `config/watchlist.yml` are tuned for low-frequency investin
 | Market-confirmed re-rating | `+8%` day or `+15%` over 5 days, plus `2x` 20-day average volume |
 | VIX extreme fear | `>= 30` |
 | VIX extreme greed / complacency | `<= 12` |
+| Crypto Fear & Greed fear watch | `<= 25` |
+| Crypto Fear & Greed extreme fear | `<= 15` |
+| Crypto Fear & Greed extreme greed | `>= 80` |
 
 The bot deliberately ignores ordinary selloffs and routine daily movements.
 
@@ -41,9 +45,12 @@ This covers routes such as:
 - Airbus → Oracle
 - Oracle → Airbus
 - Airbus → PDD / Meituan / Microsoft
+- Airbus / other holdings → Bitcoin, when BTC is near a low or in a sharp selloff
 - any other current holding pair that meets the rules
 
 The alert always includes a manual fundamental guardrail for the target stock. Before acting, check that the target stock has not broken its core thesis.
+
+Bitcoin is configured with `position: 0` and `allow_as_target_when_not_held: true`, so it can appear as a potential target for future rotation without being treated as a funding source.
 
 ### Deep-Loss Protection
 
@@ -107,6 +114,8 @@ The first config uses Yahoo Finance tickers:
 - PDD: `PDD`
 - Meituan: `3690.HK`
 - Tencent: `0700.HK`
+- Bitcoin: `BTC-USD`
+- BlackRock Bitcoin ETF: `IBIT`
 - JD Hong Kong: `9618.HK`
 - NIO: `NIO`
 - iQIYI: `IQ`

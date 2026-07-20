@@ -28,6 +28,31 @@ rotation_engine:
   action_template: "Review trimming a small tranche from the strength candidate and moving it into the opportunity candidate."
 
 stocks:
+  - name: Bitcoin
+    ticker: BTC-USD
+    position: 0
+    cost_basis: 0
+    currency: USD
+    asset_type: crypto
+    notes: "Potential future allocation. Watch extreme fear, ETF adoption, miner economics, and macro liquidity."
+    rotation:
+      role: aggressive
+      allow_as_target_when_not_held: true
+      sell_strength:
+        min_daily_pct: 8.0
+        min_5d_pct: 18.0
+      buy_opportunity:
+        near_low_years: 1
+        near_low_tolerance_pct: 8.0
+        max_5d_pct: -12.0
+      fundamental_guardrail:
+        red_flags:
+          - "Spot Bitcoin ETFs return to persistent multi-week outflows"
+          - "Regulatory actions materially impair U.S./EU institutional access"
+          - "Network security concerns appear through a sustained hashrate collapse"
+          - "Liquidity tightens sharply due to hawkish Fed, rising real yields, or credit stress"
+          - "Stablecoin or major exchange stress creates systemic crypto liquidity risk"
+
   - name: Airbus
     ticker: AIR.PA
     position: 18
@@ -240,6 +265,21 @@ stocks:
           - "China ADR or regulatory risk materially worsens"
 
 market_indicators:
+  - name: Crypto Fear & Greed
+    type: crypto_fear_greed
+    ticker: CRYPTO_FNG
+    rules:
+      extreme_fear_below: 15
+      fear_watch_below: 25
+      extreme_greed_above: 80
+    notes: "Extreme fear may fit BTC accumulation watch. Extreme greed may fit patience or trimming discipline."
+
+  - name: BlackRock Bitcoin ETF
+    ticker: IBIT
+    rules:
+      watch_only: true
+    notes: "Institutional Bitcoin access proxy. Watch price trend together with BTC and ETF flow news."
+
   - name: VIX
     ticker: ^VIX
     rules:
