@@ -1,0 +1,99 @@
+portfolio:
+  base_currency: EUR
+  alert_timezone: Europe/Paris
+  send_email_when_no_alerts: false
+
+global_rules:
+  daily_up_pct: 4.0
+  daily_down_pct: -4.0
+  five_day_up_pct: 8.0
+  five_day_down_pct: -8.0
+  volume_ratio_min: 2.0
+
+stocks:
+  - name: Airbus
+    ticker: AIR.PA
+    position: 18
+    cost_basis: 191.54
+    currency: EUR
+    notes: "Core holding. Consider trimming 2-3 shares on strength near 205-210."
+    levels:
+      watch_support: 190
+      trim_zone: 205
+      strong_resistance: 216
+      risk_level: 180
+
+  - name: Oracle
+    ticker: ORCL
+    position: 14
+    cost_basis: 132.07
+    currency: EUR
+    notes: "High-risk AI infrastructure rebound holding. Watch debt, FCF, capex, Fed path."
+    levels:
+      panic_watch_usd: 120
+      add_confirmation_usd: 135
+      recovery_confirmation_usd: 145
+      trim_zone_usd: 155
+
+  - name: Microsoft
+    ticker: MSFT
+    position: 2
+    cost_basis: 320.50
+    currency: EUR
+    notes: "Quality mega-cap tech. More defensive than Oracle/PDD/Meituan."
+
+  - name: PDD
+    ticker: PDD
+    position: 10
+    cost_basis: 101.60
+    currency: EUR
+    notes: "High-volatility China e-commerce exposure."
+
+  - name: Meituan
+    ticker: 3690.HK
+    position: 44
+    cost_basis: 23.55
+    currency: EUR
+    notes: "China platform/consumption exposure. HKD ticker."
+
+  - name: Tencent
+    ticker: 0700.HK
+    position: 1
+    cost_basis: 48.12
+    currency: EUR
+    notes: "Residual observation position after successful prior trade."
+
+  - name: NIO
+    ticker: NIO
+    position: 12
+    cost_basis: 4.49
+    currency: EUR
+    notes: "Tiny speculative position."
+
+  - name: iQIYI
+    ticker: IQ
+    position: 35
+    cost_basis: 14.23
+    currency: EUR
+    notes: "High-risk small China ADR position."
+
+market_indicators:
+  - name: VIX
+    ticker: ^VIX
+    rules:
+      above:
+        - 25
+        - 30
+    notes: "Above 25 starts to fit panic-buy watch. Above 30 is genuine market fear."
+
+  - name: US 10Y Yield
+    ticker: ^TNX
+    rules:
+      above:
+        - 45.0
+        - 47.5
+    notes: "Yahoo quotes TNX as yield x10. 45 means 4.5%. Higher yields pressure high-duration tech."
+
+  - name: Nasdaq 100 ETF
+    ticker: QQQ
+    notes: "AI / mega-cap tech risk appetite proxy."
