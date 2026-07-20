@@ -90,26 +90,39 @@ def fetch_quality_report() -> str:
     if not FETCH_SETTINGS.get("include_quality_report", True):
         return ""
 
-    qualities = DATA_QUALITY_LOG
-    if not FETCH_SETTINGS.get("include_successful_fetches", True):
-        qualities = [item for item in qualities if item.status != "ok" or item.warnings]
-
-    if not qualities:
+    if not DATA_QUALITY_LOG:
         return ""
 
     ok_count = sum(1 for item in DATA_QUALITY_LOG if item.status == "ok")
-    warn_count = sum(1 for item in DATA_QUALITY_LOG if item.status == "ok" and item.warnings)
+    warning_items = [item for item in DATA_QUALITY_LOG if item.warnings]
+    failed_items = [item for item in DATA_QUALITY_LOG if item.status != "ok"]
+    warn_count = len(warning_items)
     fail_count = sum(1 for item in DATA_QUALITY_LOG if item.status != "ok")
+    total_count = len(DATA_QUALITY_LOG)
+    qualities_to_show = failed_items + [item for item in warning_items if item.status == "ok"]
+    if FETCH_SETTINGS.get("include_successful_fetches", False):
+        qualities_to_show = DATA_QUALITY_LOG
+
+    quality_status = "良好 / good"
+    if fail_count:
+        quality_status = "有失败，需要复核 / failures, review needed"
+    elif warn_count:
+        quality_status = "有轻微警告 / minor warnings"
+
     lines = [
         "四、数据获取质量 / Data Quality",
         "----------------------------",
-        f"本次外部数据请求：成功 {ok_count}，有警告 {warn_count}，失败 {fail_count}。",
-        f"External data fetches this run: {ok_count} ok, {warn_count} with warnings, {fail_count} failed.",
-        "说明：数据来自免费/公开接口，可能有延迟、节假日缺口或个别 ticker 抓取失败；任何交易前仍应人工复核关键价格和新闻。",
-        "Note: public/free data can be delayed or missing around holidays; verify key prices and news manually before trading.",
-        "",
+        f"结论：本次数据质量 {quality_status}。",
+        f"Summary: data quality this run was {quality_status}.",
+        f"请求汇总：共 {total_count} 个数据点，成功 {ok_count}，警告 {warn_count}，失败 {fail_count}。",
+        f"Fetch summary: {total_count} data points, {ok_count} ok, {warn_count} warnings, {fail_count} failures.",
+        "说明：这里只展开异常项。免费/公开接口可能有延迟、节假日缺口或个别 ticker 抓取失败；交易前仍应人工复核关键价格和新闻。",
+        "Note: only exceptions are listed. Public/free data can be delayed or missing around holidays; verify key prices and news manually before trading.",
     ]
-    lines.extend(quality_line(item) for item in qualities)
+    if qualities_to_show:
+        lines.append("")
+        lines.append("异常项 / Exceptions:")
+        lines.extend(quality_line(item) for item in qualities_to_show)
     return "\n".join(lines)
 
 

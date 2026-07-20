@@ -36,18 +36,14 @@ The bot is deliberately conservative when calling external data sources:
 - failed requests are retried with backoff
 - Yahoo Finance calls run with `threads=False` to reduce bursty behavior
 - Crypto Fear & Greed calls include a simple user agent
-- each email includes a data quality report
+- each email includes a concise data quality summary
 
 The data quality section shows:
 
-- source
-- ticker or indicator
-- success/failure status
-- number of attempts
-- number of historical rows returned
-- latest data date
-- freshness in calendar days
-- warnings such as stale data, missing volume, limited history, or failed fetch
+- total data points requested
+- success, warning, and failure counts
+- a plain-language quality conclusion
+- exception details only when something is stale, missing, limited, or failed
 
 This helps distinguish a strong investment signal from a weak signal caused by bad or stale data.
 

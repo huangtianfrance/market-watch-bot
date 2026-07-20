@@ -13,7 +13,7 @@ data_fetch:
   stale_after_calendar_days: 7
   min_history_rows: 60
   include_quality_report: true
-  include_successful_fetches: true
+  include_successful_fetches: false
   note: "Polite pacing, retry with backoff, per-run cache, and data quality reporting."
 
 global_rules:
