@@ -5,6 +5,17 @@ portfolio:
   report_mode: alerts_only
   language: zh_en
 
+data_fetch:
+  provider: Yahoo Finance via yfinance
+  request_pause_seconds: 0.7
+  max_retries: 3
+  retry_backoff_seconds: 2.0
+  stale_after_calendar_days: 7
+  min_history_rows: 60
+  include_quality_report: true
+  include_successful_fetches: true
+  note: "Polite pacing, retry with backoff, per-run cache, and data quality reporting."
+
 global_rules:
   stock_big_up_daily_pct: 5.0
   stock_big_up_5d_pct: 10.0

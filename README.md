@@ -27,6 +27,30 @@ Technical terms are explained briefly in the email. For example, volume is descr
 
 The tone is deliberately direct: recommendation, rationale, decision condition, and risk guardrail.
 
+## External Data Best Practices
+
+The bot is deliberately conservative when calling external data sources:
+
+- per-run caching avoids fetching the same ticker more than once
+- requests are paced with a small pause between calls
+- failed requests are retried with backoff
+- Yahoo Finance calls run with `threads=False` to reduce bursty behavior
+- Crypto Fear & Greed calls include a simple user agent
+- each email includes a data quality report
+
+The data quality section shows:
+
+- source
+- ticker or indicator
+- success/failure status
+- number of attempts
+- number of historical rows returned
+- latest data date
+- freshness in calendar days
+- warnings such as stale data, missing volume, limited history, or failed fetch
+
+This helps distinguish a strong investment signal from a weak signal caused by bad or stale data.
+
 ## Holdings vs Watchlist
 
 `position > 0` means the instrument is currently held. The bot can treat it as both:

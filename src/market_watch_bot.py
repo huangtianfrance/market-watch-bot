@@ -2,9 +2,10 @@ import argparse
 import json
 import os
 import smtplib
+import time
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from email.message import EmailMessage
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -22,6 +23,7 @@ class Quote:
     volume: Optional[float]
     avg_volume_20d: Optional[float]
     close_history: Any
+    quality: "DataQuality"
 
 
 @dataclass
@@ -30,15 +32,142 @@ class SentimentIndex:
     value: int
     classification: str
     timestamp: str
+    quality: "DataQuality"
+
+
+@dataclass
+class DataQuality:
+    source: str
+    symbol: str
+    status: str
+    rows: int = 0
+    latest_date: str = "n/a"
+    freshness_days: Optional[int] = None
+    attempts: int = 1
+    warnings: Optional[List[str]] = None
+    error: Optional[str] = None
+
+
+DATA_QUALITY_LOG: List[DataQuality] = []
+FETCH_SETTINGS: Dict[str, Any] = {
+    "request_pause_seconds": 0.7,
+    "max_retries": 3,
+    "retry_backoff_seconds": 2.0,
+    "stale_after_calendar_days": 7,
+    "min_history_rows": 60,
+    "include_quality_report": True,
+    "include_successful_fetches": True,
+}
 
 
 def load_config(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as file:
-        return yaml.safe_load(file)
+        config = yaml.safe_load(file)
+    FETCH_SETTINGS.update(config.get("data_fetch", {}))
+    return config
+
+
+def log_quality(quality: DataQuality) -> None:
+    DATA_QUALITY_LOG.append(quality)
+
+
+def quality_line(quality: DataQuality) -> str:
+    warnings = quality.warnings or []
+    warning_text = "无 / none" if not warnings else "; ".join(warnings)
+    freshness = "n/a" if quality.freshness_days is None else f"{quality.freshness_days}天"
+    base = (
+        f"{quality.symbol}: {quality.status}; 来源/source={quality.source}; "
+        f"尝试/attempts={quality.attempts}; 数据行/rows={quality.rows}; "
+        f"最新日期/latest={quality.latest_date}; 新鲜度/freshness={freshness}; "
+        f"提示/warnings={warning_text}"
+    )
+    if quality.error:
+        base += f"; 错误/error={quality.error}"
+    return base
+
+
+def fetch_quality_report() -> str:
+    if not FETCH_SETTINGS.get("include_quality_report", True):
+        return ""
+
+    qualities = DATA_QUALITY_LOG
+    if not FETCH_SETTINGS.get("include_successful_fetches", True):
+        qualities = [item for item in qualities if item.status != "ok" or item.warnings]
+
+    if not qualities:
+        return ""
+
+    ok_count = sum(1 for item in DATA_QUALITY_LOG if item.status == "ok")
+    warn_count = sum(1 for item in DATA_QUALITY_LOG if item.status == "ok" and item.warnings)
+    fail_count = sum(1 for item in DATA_QUALITY_LOG if item.status != "ok")
+    lines = [
+        "四、数据获取质量 / Data Quality",
+        "----------------------------",
+        f"本次外部数据请求：成功 {ok_count}，有警告 {warn_count}，失败 {fail_count}。",
+        f"External data fetches this run: {ok_count} ok, {warn_count} with warnings, {fail_count} failed.",
+        "说明：数据来自免费/公开接口，可能有延迟、节假日缺口或个别 ticker 抓取失败；任何交易前仍应人工复核关键价格和新闻。",
+        "Note: public/free data can be delayed or missing around holidays; verify key prices and news manually before trading.",
+        "",
+    ]
+    lines.extend(quality_line(item) for item in qualities)
+    return "\n".join(lines)
+
+
+def data_latest_date_and_freshness(close: Any) -> Tuple[str, Optional[int]]:
+    try:
+        latest = close.index[-1]
+        if hasattr(latest, "to_pydatetime"):
+            latest_dt = latest.to_pydatetime()
+        else:
+            latest_dt = latest
+        if latest_dt.tzinfo is None:
+            latest_dt = latest_dt.replace(tzinfo=timezone.utc)
+        freshness_days = (datetime.now(timezone.utc).date() - latest_dt.date()).days
+        return latest_dt.date().isoformat(), freshness_days
+    except Exception:
+        return "n/a", None
 
 
 def fetch_quote(ticker: str) -> Quote:
-    data = yf.download(ticker, period="5y", interval="1d", progress=False, auto_adjust=False)
+    attempts = int(FETCH_SETTINGS.get("max_retries", 3))
+    backoff = float(FETCH_SETTINGS.get("retry_backoff_seconds", 2.0))
+    pause = float(FETCH_SETTINGS.get("request_pause_seconds", 0.7))
+    last_error: Optional[Exception] = None
+    data = None
+
+    for attempt in range(1, attempts + 1):
+        if pause > 0:
+            time.sleep(pause)
+        try:
+            data = yf.download(
+                ticker,
+                period="5y",
+                interval="1d",
+                progress=False,
+                auto_adjust=False,
+                threads=False,
+                timeout=20,
+            )
+            if data is not None and not data.empty and len(data) >= 2:
+                break
+            last_error = ValueError(f"No usable price data returned for {ticker}")
+        except Exception as exc:
+            last_error = exc
+        if attempt < attempts:
+            time.sleep(backoff * attempt)
+
+    if data is None or data.empty or len(data) < 2:
+        quality = DataQuality(
+            source="Yahoo Finance/yfinance",
+            symbol=ticker,
+            status="failed",
+            attempts=attempts,
+            warnings=["数据为空或不足 / empty or insufficient data"],
+            error=str(last_error) if last_error else "unknown error",
+        )
+        log_quality(quality)
+        raise ValueError(f"No price data returned for {ticker}: {quality.error}")
+
     if data.empty or len(data) < 2:
         raise ValueError(f"No price data returned for {ticker}")
 
@@ -49,6 +178,28 @@ def fetch_quote(ticker: str) -> Quote:
 
     close = data["Close"].dropna()
     volume = data["Volume"].dropna() if "Volume" in data.columns else None
+    latest_date, freshness_days = data_latest_date_and_freshness(close)
+    warnings: List[str] = []
+    if len(close) < int(FETCH_SETTINGS.get("min_history_rows", 60)):
+        warnings.append("历史数据偏少 / limited history")
+    stale_after = int(FETCH_SETTINGS.get("stale_after_calendar_days", 7))
+    if freshness_days is not None and freshness_days > stale_after:
+        warnings.append(f"最新行情可能偏旧，超过{stale_after}天 / stale data")
+    if volume is None or volume.empty:
+        warnings.append("缺少成交量数据 / missing volume")
+
+    quality = DataQuality(
+        source="Yahoo Finance/yfinance",
+        symbol=ticker,
+        status="ok",
+        rows=len(close),
+        latest_date=latest_date,
+        freshness_days=freshness_days,
+        attempts=attempt,
+        warnings=warnings,
+    )
+    log_quality(quality)
+
     last = float(close.iloc[-1])
     previous_close = float(close.iloc[-2])
     daily_pct = (last / previous_close - 1) * 100
@@ -73,19 +224,71 @@ def fetch_quote(ticker: str) -> Quote:
         volume=current_volume,
         avg_volume_20d=avg_volume_20d,
         close_history=close,
+        quality=quality,
     )
 
 
 def fetch_crypto_fear_greed() -> SentimentIndex:
     url = "https://api.alternative.me/fng/?limit=1"
-    with urllib.request.urlopen(url, timeout=20) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    attempts = int(FETCH_SETTINGS.get("max_retries", 3))
+    backoff = float(FETCH_SETTINGS.get("retry_backoff_seconds", 2.0))
+    pause = float(FETCH_SETTINGS.get("request_pause_seconds", 0.7))
+    last_error: Optional[Exception] = None
+    payload = None
+    for attempt in range(1, attempts + 1):
+        if pause > 0:
+            time.sleep(pause)
+        try:
+            request = urllib.request.Request(url, headers={"User-Agent": "market-watch-bot/1.0"})
+            with urllib.request.urlopen(request, timeout=20) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt < attempts:
+                time.sleep(backoff * attempt)
+
+    if payload is None:
+        quality = DataQuality(
+            source="Alternative.me Crypto Fear & Greed API",
+            symbol="CRYPTO_FNG",
+            status="failed",
+            attempts=attempts,
+            warnings=["情绪指数获取失败 / sentiment fetch failed"],
+            error=str(last_error) if last_error else "unknown error",
+        )
+        log_quality(quality)
+        raise ValueError(f"Crypto Fear & Greed fetch failed: {quality.error}")
+
     item = payload["data"][0]
+    warnings: List[str] = []
+    timestamp = item.get("timestamp", "")
+    freshness_days = None
+    if timestamp:
+        try:
+            ts_dt = datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
+            freshness_days = (datetime.now(timezone.utc).date() - ts_dt.date()).days
+            if freshness_days > int(FETCH_SETTINGS.get("stale_after_calendar_days", 7)):
+                warnings.append("情绪指数可能偏旧 / stale sentiment data")
+        except Exception:
+            warnings.append("无法解析情绪指数时间戳 / timestamp parse failed")
+    quality = DataQuality(
+        source="Alternative.me Crypto Fear & Greed API",
+        symbol="CRYPTO_FNG",
+        status="ok",
+        rows=1,
+        latest_date=timestamp or "n/a",
+        freshness_days=freshness_days,
+        attempts=attempt,
+        warnings=warnings,
+    )
+    log_quality(quality)
     return SentimentIndex(
         name="Crypto Fear & Greed",
         value=int(item["value"]),
         classification=item["value_classification"],
         timestamp=item.get("timestamp", ""),
+        quality=quality,
     )
 
 
@@ -523,6 +726,7 @@ def check_rotation_signal(signal: Dict[str, Any]) -> List[str]:
 
 
 def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
+    DATA_QUALITY_LOG.clear()
     lines: List[str] = []
     triggered = False
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
@@ -634,6 +838,11 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append("结论：今天没有达到 CEO 决策级别的信号。建议继续观察，不做动作。")
         lines.append("Conclusion: no CEO-level decision signal was triggered today. Recommendation: stay patient and take no action.")
 
+    quality_report = fetch_quality_report()
+    if quality_report:
+        lines.append("")
+        lines.append(quality_report)
+
     return "\n".join(lines), triggered
 
 
@@ -669,7 +878,7 @@ def main() -> None:
     if args.dry_run:
         return
     if triggered or send_when_no_alerts:
-        subject = "CEO投资简报 / CEO Investment Brief" if triggered else "Market Watch Daily Report"
+        subject = "CEO投资简报 / CEO Investment Brief" if triggered else "CEO投资简报：无动作 / CEO Brief: No Action"
         send_email(subject, report)
 
 
