@@ -2,13 +2,20 @@ portfolio:
   base_currency: EUR
   alert_timezone: Europe/Paris
   send_email_when_no_alerts: false
+  report_mode: alerts_only
+  language: zh_en
 
 global_rules:
-  daily_up_pct: 4.0
-  daily_down_pct: -4.0
-  five_day_up_pct: 8.0
-  five_day_down_pct: -8.0
-  volume_ratio_min: 2.0
+  stock_big_up_daily_pct: 5.0
+  stock_big_up_5d_pct: 10.0
+  historic_low_lookback_years:
+    - 1
+    - 3
+    - 5
+  historic_low_tolerance_pct: 2.0
+  confirmed_rerating_daily_pct: 8.0
+  confirmed_rerating_5d_pct: 15.0
+  confirmed_rerating_volume_ratio_min: 2.0
 
 stocks:
   - name: Airbus
@@ -81,17 +88,12 @@ market_indicators:
   - name: VIX
     ticker: ^VIX
     rules:
-      above:
-        - 25
-        - 30
-    notes: "Above 25 starts to fit panic-buy watch. Above 30 is genuine market fear."
+      extreme_fear_above: 30
+      extreme_greed_below: 12
+    notes: "Extreme fear may fit panic-buy watch. Extreme greed may fit strength-selling discipline."
 
   - name: US 10Y Yield
     ticker: ^TNX
-    rules:
-      above:
-        - 45.0
-        - 47.5
     notes: "Yahoo quotes TNX as yield x10. 45 means 4.5%. Higher yields pressure high-duration tech."
 
   - name: Nasdaq 100 ETF

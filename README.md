@@ -4,11 +4,28 @@ A lightweight cloud-ready stock alert bot for a low-frequency, panic-buy / stren
 
 It checks your watchlist on a schedule and emails you when a rule is triggered:
 
-- large daily gain or loss
-- 5-day move
-- unusual volume versus 20-day average
-- price breaks above or below custom levels
-- portfolio-specific notes, such as "consider trimming" or "watch for panic-buy setup"
+- a held stock rises sharply
+- VIX reaches extreme fear or extreme greed / complacency
+- a held stock trades near its 1-year, 3-year, or 5-year low
+- a possible market-confirmed fundamental re-rating appears, defined as a strong positive price move with unusual volume
+
+The report is intentionally alert-only and bilingual Chinese/English. It does not send routine portfolio summaries unless `send_email_when_no_alerts` is set to `true`.
+
+## Default Alert Rules
+
+The default rules in `config/watchlist.yml` are tuned for low-frequency investing:
+
+| Rule | Default |
+|---|---:|
+| Single-day big rally | `+5%` |
+| 5-day strength | `+10%` |
+| Historic low window | `1Y`, `3Y`, `5Y` |
+| Near-low tolerance | within `2%` of the low |
+| Market-confirmed re-rating | `+8%` day or `+15%` over 5 days, plus `2x` 20-day average volume |
+| VIX extreme fear | `>= 30` |
+| VIX extreme greed / complacency | `<= 12` |
+
+The bot deliberately ignores ordinary selloffs and routine daily movements.
 
 ## Cloud Option: GitHub Actions
 
