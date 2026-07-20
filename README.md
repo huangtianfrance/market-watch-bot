@@ -14,15 +14,18 @@ The report is intentionally alert-only and bilingual Chinese/English. It does no
 
 ## Email Style
 
-Alert emails are written like a short investment memo, not a machine log. Each alert tries to explain:
+Alert emails are written as a CEO investment brief, not a machine log. Each alert tries to explain:
 
+- the conclusion first
 - what happened
 - why it matters
 - what the signal means in plain language
-- what decision may be worth considering
-- what fundamental red flags should be checked before acting
+- what decision may be worth considering as CEO
+- what fundamental red flags should be checked before approving action
 
 Technical terms are explained briefly in the email. For example, volume is described as market participation/attention, and a market-confirmed re-rating is explained as price plus volume showing that real money may be repricing the asset.
+
+The tone is deliberately direct: recommendation, rationale, decision condition, and risk guardrail.
 
 ## Holdings vs Watchlist
 

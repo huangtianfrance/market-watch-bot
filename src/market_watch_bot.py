@@ -115,28 +115,28 @@ def quote_snapshot(quote: Quote) -> str:
         f"今天涨跌/Today: {pct_line(quote.daily_pct)}\n"
         f"最近5个交易日/Last 5 trading days: {pct_line(quote.five_day_pct)}\n"
         f"成交量/Volume: 约为20日平均成交量的 {ratio_text}\n"
-        f"说明/Plain English: 成交量可以理解为市场参与热度。价格变化配合放量，通常比单纯涨跌更值得看。"
+        f"术语解释/Plain English: 成交量可以理解为市场参与热度。价格变化配合放量，通常比单纯涨跌更值得重视。"
     )
 
 
 def explain_low_signal() -> str:
     return (
-        "这类信号不是叫你马上买，而是在说：价格已经接近过去一段时间市场给过的低估/恐慌区。\n"
-        "下一步要看基本面有没有坏。如果公司逻辑没坏，这才可能是你偏好的低吸机会。"
+        "这不是直接买入指令，而是进入投研优先区：价格已经接近过去一段时间市场给过的低估/恐慌区。\n"
+        "CEO 决策点：如果基本面没有破坏，可以进入分批建仓评估；如果基本面已经坏了，则视为价值陷阱。"
     )
 
 
 def explain_rerating_signal() -> str:
     return (
         "“市场确认的重估”意思是：不只是新闻好听，而是价格明显上涨、成交量也明显放大，说明有真实资金在重新定价。\n"
-        "这种信号更适合做研究确认，不适合闭眼追高。"
+        "CEO 决策点：这是提高研究优先级的信号，不是追高指令；需要确认基本面变化是否真实可持续。"
     )
 
 
 def explain_rotation_signal() -> str:
     return (
-        "这是一个调仓观察，不是自动交易指令。\n"
-        "逻辑是：把一只已经走强、适合卖一点的持仓，和另一只进入低位机会的标的配对，看看是否值得换一小部分仓位。"
+        "这是一个调仓候选，不是自动交易指令。\n"
+        "投资逻辑：把一只已经走强、适合释放部分资金的持仓，和另一只进入低位机会的标的配对，评估是否能提高未来3-12个月的收益/风险比。"
     )
 
 
@@ -161,7 +161,8 @@ def check_stock_rules(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
             bilingual(
                 (
                     f"{name} 今天涨得比较猛，单日上涨 {quote.daily_pct:+.2f}%。\n"
-                    f"这类信号更偏向你的“上涨时考虑卖一点”规则。可以看看是不是到了减仓/换仓区，而不是继续追。"
+                    f"投资含义：这更接近你的“上涨时考虑卖一点”纪律，而不是追高信号。\n"
+                    f"建议动作：检查是否进入减仓、锁定利润或换入低位标的的窗口。"
                 ),
                 (
                     f"{name} had a strong rally today, up {quote.daily_pct:+.2f}%.\n"
@@ -175,7 +176,8 @@ def check_stock_rules(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
             bilingual(
                 (
                     f"{name} 最近几天连续走强，5个交易日涨了 {quote.five_day_pct:+.2f}%。\n"
-                    f"这说明不是一天的随机波动，可能已经有一波资金在推。可以考虑是否把部分利润换到更低位的机会里。"
+                    f"投资含义：这不是一天的随机波动，可能已有资金连续推升。\n"
+                    f"建议动作：评估是否把部分利润轮动到更低位、更有弹性的机会里。"
                 ),
                 (
                     f"{name} has shown sustained strength, up {quote.five_day_pct:+.2f}% over 5 trading days.\n"
@@ -194,7 +196,7 @@ def check_stock_rules(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
                 (
                     f"{name} 可能出现“市场确认的重估”。简单说：价格涨得明显，成交量也放大到20日均量的 {ratio:.1f} 倍。\n"
                     f"{explain_rerating_signal()}\n"
-                    f"下一步：检查是不是有财报、业绩指引、订单、监管变化或管理层表态支撑。"
+                    f"需确认事项：是否有财报、业绩指引、订单、监管变化或管理层表态支撑。"
                 ),
                 (
                     f"{name} may be seeing a market-confirmed re-rating: price moved strongly and volume reached {ratio:.1f}x the 20-day average.\n"
@@ -213,7 +215,7 @@ def check_stock_rules(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
                     (
                         f"{name} 已经接近 {years} 年低位。当前价格 {quote.last:.2f}，{years} 年低点大约 {low:.2f}。\n"
                         f"{explain_low_signal()}\n"
-                        f"可做决策：加入重点研究清单；如果基本面没破，可以考虑小仓分批，而不是一次性重仓。"
+                        f"建议动作：加入重点研究清单；如果基本面没破，优先考虑小仓分批，而不是一次性重仓。"
                     ),
                     (
                         f"{name} is near a {years}-year low. Current price is {quote.last:.2f}; the {years}-year low is about {low:.2f}.\n"
@@ -237,7 +239,7 @@ def check_indicator_rules(indicator: Dict[str, Any], quote: Quote) -> List[str]:
                 (
                     f"{name} 进入极度恐慌区，当前 {quote.last:.2f}，触发线是 {extreme_fear}。\n"
                     f"简单说：市场开始愿意花更多钱买保护，说明大家明显害怕下跌。\n"
-                    f"可做决策：这更接近你的恐慌买入环境，但仍要优先挑基本面没坏、只是被一起杀下来的标的。"
+                    f"CEO 决策点：这更接近你的恐慌买入环境，但仍要优先挑基本面没坏、只是被一起杀下来的标的。"
                 ),
                 (
                     f"{name} entered extreme-fear territory: current {quote.last:.2f}, threshold {extreme_fear}.\n"
@@ -253,7 +255,7 @@ def check_indicator_rules(indicator: Dict[str, Any], quote: Quote) -> List[str]:
                 (
                     f"{name} 进入极度贪婪/自满区，当前 {quote.last:.2f}，触发线是 {extreme_greed}。\n"
                     f"简单说：市场太放松，大家不怎么害怕风险。\n"
-                    f"可做决策：这通常不是追高的好环境，更适合检查哪些持仓涨多了、是否要卖一点。"
+                    f"CEO 决策点：这通常不是追高的好环境，更适合检查哪些持仓涨多了、是否要卖一点。"
                 ),
                 (
                     f"{name} entered extreme-greed / complacency territory: current {quote.last:.2f}, threshold {extreme_greed}.\n"
@@ -277,7 +279,7 @@ def check_sentiment_index_rules(indicator: Dict[str, Any], sentiment: SentimentI
                 (
                     f"{name} 进入极度恐慌区：当前 {sentiment.value} ({sentiment.classification})，触发线 <= {extreme_fear}。\n"
                     f"简单说：加密市场情绪很差，很多人在逃离风险。\n"
-                    f"可做决策：如果 BTC ETF 没有持续流出、监管和网络安全没有新雷，可以开始认真研究小仓分批。"
+                    f"CEO 决策点：如果 BTC ETF 没有持续流出、监管和网络安全没有新雷，可以开始认真研究小仓分批。"
                 ),
                 (
                     f"{name} entered extreme-fear territory: current {sentiment.value} ({sentiment.classification}), threshold <= {extreme_fear}.\n"
@@ -293,7 +295,7 @@ def check_sentiment_index_rules(indicator: Dict[str, Any], sentiment: SentimentI
                 (
                     f"{name} 进入恐慌观察区：当前 {sentiment.value} ({sentiment.classification})，触发线 <= {fear_watch}。\n"
                     f"这还不一定是极端底部，但已经值得把 BTC 放到重点观察列表。\n"
-                    f"可做决策：先不急买，等价格也接近低位，或出现恐慌后不再创新低。"
+                    f"建议动作：先不急买，等价格也接近低位，或出现恐慌后不再创新低。"
                 ),
                 (
                     f"{name} entered fear-watch territory: current {sentiment.value} ({sentiment.classification}), threshold <= {fear_watch}.\n"
@@ -309,7 +311,7 @@ def check_sentiment_index_rules(indicator: Dict[str, Any], sentiment: SentimentI
                 (
                     f"{name} 进入极度贪婪区：当前 {sentiment.value} ({sentiment.classification})，触发线 >= {extreme_greed}。\n"
                     f"简单说：加密市场情绪太热，追涨风险变高。\n"
-                    f"可做决策：如果你还没买 BTC，通常更适合等待；如果已经持有，才考虑是否卖一点。"
+                    f"CEO 决策点：如果还没买 BTC，通常更适合等待；如果已经持有，才考虑是否卖一点。"
                 ),
                 (
                     f"{name} entered extreme-greed territory: current {sentiment.value} ({sentiment.classification}), threshold >= {extreme_greed}.\n"
@@ -444,12 +446,12 @@ def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote])
             pairs.append(
                 bilingual(
                     (
-                        f"我发现一个值得你看一眼的轮动机会：{from_stock['name']} → {to_stock['name']}。\n\n"
+                        f"结论：出现一个需要 CEO 关注的组合轮动候选：{from_stock['name']} → {to_stock['name']}。\n\n"
                         f"{explain_rotation_signal()}\n\n"
                         f"为什么可能卖一点 {from_stock['name']}：\n{plain_reason_list(from_reasons)}\n\n"
                         f"为什么可能研究 {to_stock['name']}：\n{plain_reason_list(to_reasons)}\n\n"
-                        f"可以考虑的动作：先研究，不急着全仓切换。如果确认逻辑成立，通常更适合小比例试探或分批，而不是一次性大换仓。\n\n"
-                        f"执行前最重要的一步：确认 {to_stock['name']} 不是基本面坏了。请先排除这些红旗：\n{guardrail_text(to_stock)}"
+                        f"建议动作：先进入人工复核，不建议直接全仓切换。如果确认逻辑成立，优先考虑小比例试探或分批轮动。\n\n"
+                        f"投前条件：确认 {to_stock['name']} 不是基本面坏了。请先排除这些红旗：\n{guardrail_text(to_stock)}"
                     ),
                     (
                         f"Portfolio rotation watch: {from_stock['name']} → {to_stock['name']}.\n\n"
@@ -525,15 +527,15 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
     triggered = False
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
-    lines.append(f"市场观察提醒 / Market Watch Alerts - {now}")
+    lines.append(f"CEO 投资简报 / CEO Investment Brief - {now}")
     lines.append("")
     lines.append(
-        "这封邮件只在出现值得你看一眼的信号时发送。"
-        "我主要看价格位置、最近涨跌、成交量、历史低位、VIX/加密恐惧贪婪指数，以及组合里是否出现可轮动的配对。"
+        "汇报口径：本邮件只在出现值得 CEO 关注的投资信号时发送。"
+        "监控维度包括价格位置、近期涨跌、成交量、历史低位、VIX/加密恐惧贪婪指数，以及组合内可轮动配对。"
     )
     lines.append(
-        "This email is sent only when something worth reviewing appears. "
-        "The bot checks price level, recent moves, volume, historical lows, VIX/Crypto Fear & Greed, and possible portfolio rotation pairs."
+        "Briefing standard: this email is sent only when a CEO-level investment signal appears. "
+        "The system checks price level, recent moves, volume, historical lows, VIX/Crypto Fear & Greed, and possible portfolio rotation pairs."
     )
     lines.append("")
 
@@ -611,26 +613,26 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
             )
 
     if rotation_alerts:
-        lines.append("可能的调仓动作 / Possible Rotation Decisions")
+        lines.append("一、可能的调仓决策 / Potential Rotation Decisions")
         lines.append("----------------------------")
         lines.append("\n\n".join(rotation_alerts))
         lines.append("")
 
     if stock_alerts:
-        lines.append("个股机会或风险提示 / Stock-Level Signals")
+        lines.append("二、个股机会或风险提示 / Stock-Level Signals")
         lines.append("--------------------------------")
         lines.append("\n\n".join(stock_alerts))
         lines.append("")
 
     if indicator_alerts:
-        lines.append("市场情绪背景 / Market Sentiment Context")
+        lines.append("三、市场情绪背景 / Market Sentiment Context")
         lines.append("----------------------------")
         lines.append("\n\n".join(indicator_alerts))
         lines.append("")
 
     if not rotation_alerts and not stock_alerts and not indicator_alerts:
-        lines.append("今天没有值得打扰你的信号。继续观察就好。")
-        lines.append("No meaningful alerts were triggered today. Staying patient is fine.")
+        lines.append("结论：今天没有达到 CEO 决策级别的信号。建议继续观察，不做动作。")
+        lines.append("Conclusion: no CEO-level decision signal was triggered today. Recommendation: stay patient and take no action.")
 
     return "\n".join(lines), triggered
 
@@ -667,7 +669,7 @@ def main() -> None:
     if args.dry_run:
         return
     if triggered or send_when_no_alerts:
-        subject = "市场观察提醒 / Market Watch Alert" if triggered else "Market Watch Daily Report"
+        subject = "CEO投资简报 / CEO Investment Brief" if triggered else "Market Watch Daily Report"
         send_email(subject, report)
 
 
