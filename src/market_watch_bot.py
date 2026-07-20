@@ -178,6 +178,187 @@ def check_indicator_rules(indicator: Dict[str, Any], quote: Quote) -> List[str]:
     return alerts
 
 
+def stock_by_name(config: Dict[str, Any], name: str) -> Optional[Dict[str, Any]]:
+    for stock in config.get("stocks", []):
+        if stock.get("name") == name:
+            return stock
+    return None
+
+
+def get_quote(ticker: str, cache: Dict[str, Quote]) -> Quote:
+    if ticker not in cache:
+        cache[ticker] = fetch_quote(ticker)
+    return cache[ticker]
+
+
+def sell_strength_reasons(stock: Dict[str, Any], quote: Quote, global_rules: Dict[str, Any]) -> List[str]:
+    rotation = stock.get("rotation", {})
+    rules = rotation.get("sell_strength", {})
+    reasons: List[str] = []
+    loss_protection = rotation.get("loss_protection", {})
+
+    if loss_protection.get("avoid_as_funding_source_below_recovery"):
+        recovery_price = loss_protection.get("recovery_price")
+        if recovery_price is not None and quote.last < recovery_price:
+            return []
+
+    min_price = rules.get("min_price")
+    if min_price is not None and quote.last >= min_price:
+        reasons.append(f"价格达到可卖区 {quote.last:.2f} >= {min_price:.2f} / price reached sellable zone")
+
+    min_daily = rules.get("min_daily_pct", global_rules.get("rotation_sell_daily_pct"))
+    if min_daily is not None and quote.daily_pct >= min_daily:
+        reasons.append(f"单日强势 {quote.daily_pct:+.2f}% >= {min_daily:+.2f}% / strong daily move")
+
+    min_5d = rules.get("min_5d_pct", global_rules.get("rotation_sell_5d_pct"))
+    if min_5d is not None and quote.five_day_pct is not None and quote.five_day_pct >= min_5d:
+        reasons.append(f"5日强势 {quote.five_day_pct:+.2f}% >= {min_5d:+.2f}% / strong 5-day move")
+
+    return reasons
+
+
+def buy_opportunity_reasons(stock: Dict[str, Any], quote: Quote, global_rules: Dict[str, Any]) -> List[str]:
+    rotation = stock.get("rotation", {})
+    rules = rotation.get("buy_opportunity", {})
+    reasons: List[str] = []
+
+    max_price = rules.get("max_price")
+    if max_price is not None and quote.last <= max_price:
+        reasons.append(f"价格进入低吸区 {quote.last:.2f} <= {max_price:.2f} / price entered buy zone")
+
+    max_5d = rules.get("max_5d_pct", global_rules.get("rotation_buy_5d_drop_pct"))
+    if max_5d is not None and quote.five_day_pct is not None and quote.five_day_pct <= max_5d:
+        reasons.append(f"5日大跌 {quote.five_day_pct:+.2f}% <= {max_5d:+.2f}% / sharp 5-day selloff")
+
+    near_low_years = rules.get("near_low_years", global_rules.get("rotation_buy_near_low_years"))
+    if near_low_years:
+        low = history_window_min(quote, int(near_low_years))
+        tolerance_pct = rules.get("near_low_tolerance_pct", global_rules.get("rotation_buy_near_low_tolerance_pct", 0))
+        tolerance = 1 + tolerance_pct / 100
+        if low is not None and quote.last <= low * tolerance:
+            reasons.append(
+                f"接近{near_low_years}年低位：当前 {quote.last:.2f}，低点约 {low:.2f} / near {near_low_years}Y low"
+            )
+
+    return reasons
+
+
+def guardrail_text(stock: Dict[str, Any]) -> str:
+    red_flags = stock.get("rotation", {}).get("fundamental_guardrail", {}).get("red_flags", [])
+    if not red_flags:
+        return "- No stock-specific red flags configured."
+    return "\n".join(f"- {flag}" for flag in red_flags)
+
+
+def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> List[str]:
+    engine = config.get("rotation_engine", {})
+    if not engine.get("enabled", False):
+        return []
+
+    global_rules = config.get("global_rules", {})
+    stocks = [stock for stock in config.get("stocks", []) if stock.get("position", 0) > 0]
+    sell_candidates: List[Tuple[Dict[str, Any], Quote, List[str]]] = []
+    buy_candidates: List[Tuple[Dict[str, Any], Quote, List[str]]] = []
+
+    for stock in stocks:
+        quote = get_quote(stock["ticker"], quote_cache)
+        sell_reasons = sell_strength_reasons(stock, quote, global_rules)
+        if sell_reasons:
+            sell_candidates.append((stock, quote, sell_reasons))
+
+        buy_reasons = buy_opportunity_reasons(stock, quote, global_rules)
+        if buy_reasons:
+            buy_candidates.append((stock, quote, buy_reasons))
+
+    pairs: List[str] = []
+    max_pairs = int(engine.get("max_pairs_per_email", 5))
+    for from_stock, from_quote, from_reasons in sell_candidates:
+        for to_stock, to_quote, to_reasons in buy_candidates:
+            if from_stock["ticker"] == to_stock["ticker"]:
+                continue
+            if len(pairs) >= max_pairs:
+                break
+            action = engine.get(
+                "action_template",
+                "Review trimming a small tranche from the strength candidate and moving it into the opportunity candidate.",
+            )
+            pairs.append(
+                bilingual(
+                    (
+                        f"触发组合轮动观察：{from_stock['name']} → {to_stock['name']}。\n"
+                        f"建议动作：{action}\n"
+                        f"卖出候选理由：\n- " + "\n- ".join(from_reasons) + "\n"
+                        f"买入候选理由：\n- " + "\n- ".join(to_reasons) + "\n"
+                        f"执行前必须人工确认 {to_stock['name']} 基本面支撑仍在，尤其排除以下红旗：\n{guardrail_text(to_stock)}"
+                    ),
+                    (
+                        f"Portfolio rotation watch triggered: {from_stock['name']} → {to_stock['name']}.\n"
+                        f"Suggested action: {action}\n"
+                        f"Sell-candidate reasons:\n- " + "\n- ".join(from_reasons) + "\n"
+                        f"Buy-candidate reasons:\n- " + "\n- ".join(to_reasons) + "\n"
+                        f"Before acting, manually confirm {to_stock['name']}'s fundamental support is still intact, especially excluding these red flags:\n{guardrail_text(to_stock)}"
+                    ),
+                )
+                + f"\n\n{from_stock['name']} ({from_stock['ticker']})\n{quote_snapshot(from_quote)}"
+                + f"\n\n{to_stock['name']} ({to_stock['ticker']})\n{quote_snapshot(to_quote)}"
+            )
+        if len(pairs) >= max_pairs:
+            break
+
+    return pairs
+
+
+def check_rotation_signal(signal: Dict[str, Any]) -> List[str]:
+    alerts: List[str] = []
+    from_quote = fetch_quote(signal["from_ticker"])
+    to_quote = fetch_quote(signal["to_ticker"])
+
+    from_rules = signal.get("from_strength", {})
+    to_rules = signal.get("to_opportunity", {})
+    guardrail = signal.get("fundamental_guardrail", {})
+
+    from_price_ok = from_quote.last >= from_rules.get("min_price", float("inf"))
+    from_day_ok = from_quote.daily_pct >= from_rules.get("min_daily_pct", float("inf"))
+    from_5d_ok = from_quote.five_day_pct is not None and from_quote.five_day_pct >= from_rules.get("min_5d_pct", float("inf"))
+    from_strength_ok = from_price_ok or from_day_ok or from_5d_ok
+
+    to_price_ok = to_quote.last <= to_rules.get("max_price", 0)
+    to_5d_ok = to_quote.five_day_pct is not None and to_quote.five_day_pct <= to_rules.get("max_5d_pct", -float("inf"))
+    to_low_ok = False
+    low_years = to_rules.get("near_low_years")
+    if low_years:
+        low = history_window_min(to_quote, int(low_years))
+        tolerance = 1 + to_rules.get("near_low_tolerance_pct", 0) / 100
+        to_low_ok = low is not None and to_quote.last <= low * tolerance
+
+    to_opportunity_ok = to_price_ok or to_5d_ok or to_low_ok
+
+    if not (from_strength_ok and to_opportunity_ok):
+        return alerts
+
+    red_flags = guardrail.get("red_flags", [])
+    red_flag_text = "\n".join(f"- {flag}" for flag in red_flags)
+    alerts.append(
+        bilingual(
+            (
+                f"触发调仓观察：{signal['from_name']} → {signal['to_name']}。\n"
+                f"建议动作：{signal.get('action', 'Review this rotation manually.')}\n"
+                f"{signal['from_name']} 出现可卖强势；{signal['to_name']} 接近低位/大跌机会。\n"
+                f"执行前必须人工确认 {signal['to_name']} 基本面支撑仍在，尤其排除以下红旗：\n{red_flag_text}"
+            ),
+            (
+                f"Rotation watch triggered: {signal['from_name']} → {signal['to_name']}.\n"
+                f"Suggested action: {signal.get('action', 'Review this rotation manually.')}\n"
+                f"{signal['from_name']} shows sellable strength; {signal['to_name']} is near a low / selloff opportunity.\n"
+                f"Before acting, manually confirm {signal['to_name']}'s fundamental support is still intact, especially excluding these red flags:\n{red_flag_text}"
+            ),
+        )
+    )
+    alerts.append(f"{signal['from_name']} ({signal['from_ticker']})\n{quote_snapshot(from_quote)}")
+    alerts.append(f"{signal['to_name']} ({signal['to_ticker']})\n{quote_snapshot(to_quote)}")
+    return alerts
+
+
 def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
     lines: List[str] = []
     triggered = False
@@ -187,11 +368,41 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
     lines.append("")
 
     global_rules = config.get("global_rules", {})
+    quote_cache: Dict[str, Quote] = {}
+
+    rotation_alerts: List[str] = []
+    try:
+        engine_alerts = check_rotation_engine(config, quote_cache)
+        triggered = triggered or bool(engine_alerts)
+        rotation_alerts.extend(engine_alerts)
+    except Exception as exc:
+        triggered = True
+        rotation_alerts.append(
+            bilingual(
+                f"组合轮动引擎数据获取失败：{exc}",
+                f"Portfolio rotation engine data fetch failed: {exc}",
+            )
+        )
+
+    for signal in config.get("rotation_signals", []):
+        try:
+            alerts = check_rotation_signal(signal)
+            triggered = triggered or bool(alerts)
+            if alerts:
+                rotation_alerts.append("\n\n".join(alerts))
+        except Exception as exc:
+            triggered = True
+            rotation_alerts.append(
+                bilingual(
+                    f"{signal.get('name', 'Rotation signal')} 数据获取失败：{exc}",
+                    f"{signal.get('name', 'Rotation signal')} data fetch failed: {exc}",
+                )
+            )
 
     stock_alerts: List[str] = []
     for stock in config.get("stocks", []):
         try:
-            quote = fetch_quote(stock["ticker"])
+            quote = get_quote(stock["ticker"], quote_cache)
             alerts = check_stock_rules(stock, quote, global_rules)
             triggered = triggered or bool(alerts)
             for alert in alerts:
@@ -208,7 +419,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
     indicator_alerts: List[str] = []
     for indicator in config.get("market_indicators", []):
         try:
-            quote = fetch_quote(indicator["ticker"])
+            quote = get_quote(indicator["ticker"], quote_cache)
             alerts = check_indicator_rules(indicator, quote)
             triggered = triggered or bool(alerts)
             for alert in alerts:
@@ -222,6 +433,12 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
                 )
             )
 
+    if rotation_alerts:
+        lines.append("调仓信号 / Rotation Signals")
+        lines.append("----------------------------")
+        lines.append("\n\n".join(rotation_alerts))
+        lines.append("")
+
     if stock_alerts:
         lines.append("持仓股票 / Portfolio Stocks")
         lines.append("--------------------------------")
@@ -234,7 +451,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append("\n\n".join(indicator_alerts))
         lines.append("")
 
-    if not stock_alerts and not indicator_alerts:
+    if not rotation_alerts and not stock_alerts and not indicator_alerts:
         lines.append("没有触发提醒。")
         lines.append("No alerts were triggered.")
 

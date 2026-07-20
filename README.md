@@ -27,6 +27,36 @@ The default rules in `config/watchlist.yml` are tuned for low-frequency investin
 
 The bot deliberately ignores ordinary selloffs and routine daily movements.
 
+## Portfolio Rotation Engine
+
+The config includes a portfolio-wide rotation engine. It is meant to support low-frequency switching from a stronger holding into a distressed higher-upside holding.
+
+It triggers only when both sides are present:
+
+- one current holding shows sellable strength, based on its own `rotation.sell_strength` rules
+- another current holding shows a low-buy opportunity, based on its own `rotation.buy_opportunity` rules
+
+This covers routes such as:
+
+- Airbus → Oracle
+- Oracle → Airbus
+- Airbus → PDD / Meituan / Microsoft
+- any other current holding pair that meets the rules
+
+The alert always includes a manual fundamental guardrail for the target stock. Before acting, check that the target stock has not broken its core thesis.
+
+### Deep-Loss Protection
+
+Some high-volatility or deeply underwater holdings are protected from being used as funding sources before meaningful recovery. In `config/watchlist.yml`, this is controlled by:
+
+```yaml
+loss_protection:
+  avoid_as_funding_source_below_recovery: true
+  recovery_price: 160
+```
+
+For example, Meituan can still appear as a possible low-buy opportunity, but it will not be suggested as the stock to sell until it recovers toward the configured recovery price. This reflects the preference to wait for a recovery instead of realizing a severe loss, unless the thesis is manually judged broken.
+
 ## Cloud Option: GitHub Actions
 
 1. Create a private GitHub repository.

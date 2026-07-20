@@ -16,6 +16,16 @@ global_rules:
   confirmed_rerating_daily_pct: 8.0
   confirmed_rerating_5d_pct: 15.0
   confirmed_rerating_volume_ratio_min: 2.0
+  rotation_sell_daily_pct: 4.0
+  rotation_sell_5d_pct: 8.0
+  rotation_buy_5d_drop_pct: -8.0
+  rotation_buy_near_low_years: 1
+  rotation_buy_near_low_tolerance_pct: 5.0
+
+rotation_engine:
+  enabled: true
+  max_pairs_per_email: 5
+  action_template: "Review trimming a small tranche from the strength candidate and moving it into the opportunity candidate."
 
 stocks:
   - name: Airbus
@@ -24,6 +34,23 @@ stocks:
     cost_basis: 191.54
     currency: EUR
     notes: "Core holding. Consider trimming 2-3 shares on strength near 205-210."
+    rotation:
+      role: core
+      sell_strength:
+        min_price: 205
+        min_daily_pct: 2.0
+        min_5d_pct: 5.0
+      buy_opportunity:
+        near_low_years: 1
+        near_low_tolerance_pct: 6.0
+        max_5d_pct: -7.0
+      fundamental_guardrail:
+        red_flags:
+          - "Airbus cuts annual delivery guidance materially below 870 aircraft"
+          - "Engine supply or production ramp problems worsen materially"
+          - "Free cash flow guidance is cut materially"
+          - "Major quality/safety issue causes delivery halt or regulatory action"
+          - "Large order cancellations or airline demand deterioration appear"
     levels:
       watch_support: 190
       trim_zone: 205
@@ -36,6 +63,28 @@ stocks:
     cost_basis: 132.07
     currency: EUR
     notes: "High-risk AI infrastructure rebound holding. Watch debt, FCF, capex, Fed path."
+    rotation:
+      role: aggressive
+      loss_protection:
+        avoid_as_funding_source_below_recovery: true
+        recovery_price: 155
+        note: "Do not rotate out of Oracle at a deep loss unless the thesis is manually judged broken."
+      sell_strength:
+        min_price: 155
+        min_daily_pct: 5.0
+        min_5d_pct: 12.0
+      buy_opportunity:
+        max_price: 125
+        near_low_years: 1
+        near_low_tolerance_pct: 5.0
+        max_5d_pct: -8.0
+      fundamental_guardrail:
+        red_flags:
+          - "Oracle credit rating cut below investment grade"
+          - "Oracle guides RPO or OCI growth materially below prior guidance"
+          - "Oracle announces AI capex or financing materially worse than current plan"
+          - "Major OpenAI/Stargate/OCI customer contract is cancelled or repriced downward"
+          - "Free cash flow outlook worsens without credible financing or customer prepayment support"
     levels:
       panic_watch_usd: 120
       add_confirmation_usd: 135
@@ -48,6 +97,21 @@ stocks:
     cost_basis: 320.50
     currency: EUR
     notes: "Quality mega-cap tech. More defensive than Oracle/PDD/Meituan."
+    rotation:
+      role: core
+      sell_strength:
+        min_daily_pct: 3.5
+        min_5d_pct: 7.0
+      buy_opportunity:
+        near_low_years: 1
+        near_low_tolerance_pct: 5.0
+        max_5d_pct: -7.0
+      fundamental_guardrail:
+        red_flags:
+          - "Azure growth or AI monetization materially misses guidance"
+          - "Management cuts cloud or operating margin guidance"
+          - "Major regulatory or antitrust action changes business outlook"
+          - "OpenAI partnership economics materially worsen"
 
   - name: PDD
     ticker: PDD
@@ -55,6 +119,25 @@ stocks:
     cost_basis: 101.60
     currency: EUR
     notes: "High-volatility China e-commerce exposure."
+    rotation:
+      role: aggressive
+      loss_protection:
+        avoid_as_funding_source_below_recovery: true
+        recovery_price: 115
+        note: "Do not use PDD as a funding source while it is materially below recovery price unless the thesis is broken."
+      sell_strength:
+        min_daily_pct: 6.0
+        min_5d_pct: 14.0
+      buy_opportunity:
+        near_low_years: 1
+        near_low_tolerance_pct: 6.0
+        max_5d_pct: -10.0
+      fundamental_guardrail:
+        red_flags:
+          - "Temu or PDD revenue growth decelerates materially"
+          - "Margins collapse due to subsidies, tariffs, logistics or regulation"
+          - "U.S./EU regulatory pressure on Temu materially worsens"
+          - "China consumer data or platform competition weakens the thesis"
 
   - name: Meituan
     ticker: 3690.HK
@@ -62,6 +145,25 @@ stocks:
     cost_basis: 23.55
     currency: EUR
     notes: "China platform/consumption exposure. HKD ticker."
+    rotation:
+      role: aggressive
+      loss_protection:
+        avoid_as_funding_source_below_recovery: true
+        recovery_price: 160
+        note: "Deep-loss protection: wait for a meaningful recovery before using Meituan as a funding source."
+      sell_strength:
+        min_daily_pct: 6.0
+        min_5d_pct: 14.0
+      buy_opportunity:
+        near_low_years: 1
+        near_low_tolerance_pct: 6.0
+        max_5d_pct: -10.0
+      fundamental_guardrail:
+        red_flags:
+          - "Core local commerce growth or margins deteriorate materially"
+          - "Competition from Alibaba/Douyin/JD materially worsens unit economics"
+          - "China consumer spending weakens beyond current expectations"
+          - "Regulatory pressure returns in a way that impairs profitability"
 
   - name: Tencent
     ticker: 0700.HK
@@ -69,6 +171,21 @@ stocks:
     cost_basis: 48.12
     currency: EUR
     notes: "Residual observation position after successful prior trade."
+    rotation:
+      role: core
+      sell_strength:
+        min_daily_pct: 5.0
+        min_5d_pct: 10.0
+      buy_opportunity:
+        near_low_years: 1
+        near_low_tolerance_pct: 5.0
+        max_5d_pct: -8.0
+      fundamental_guardrail:
+        red_flags:
+          - "Gaming, ads, fintech or cloud growth materially weakens"
+          - "Buyback pace slows sharply without explanation"
+          - "China regulatory pressure materially returns"
+          - "Portfolio investment losses or margin pressure worsen"
 
   - name: NIO
     ticker: NIO
@@ -76,6 +193,25 @@ stocks:
     cost_basis: 4.49
     currency: EUR
     notes: "Tiny speculative position."
+    rotation:
+      role: speculative
+      loss_protection:
+        avoid_as_funding_source_below_recovery: true
+        recovery_price: 8
+        note: "Tiny speculative position; avoid selling at a deep loss unless the business/funding thesis is broken."
+      sell_strength:
+        min_daily_pct: 10.0
+        min_5d_pct: 25.0
+      buy_opportunity:
+        near_low_years: 1
+        near_low_tolerance_pct: 8.0
+        max_5d_pct: -15.0
+      fundamental_guardrail:
+        red_flags:
+          - "Liquidity runway worsens or dilution risk rises materially"
+          - "Deliveries or gross margin deteriorate materially"
+          - "China EV price war worsens"
+          - "New model cycle fails to improve demand"
 
   - name: iQIYI
     ticker: IQ
@@ -83,6 +219,25 @@ stocks:
     cost_basis: 14.23
     currency: EUR
     notes: "High-risk small China ADR position."
+    rotation:
+      role: speculative
+      loss_protection:
+        avoid_as_funding_source_below_recovery: true
+        recovery_price: 4
+        note: "Deep-loss protection: avoid selling unless the long-term thesis is broken or price materially recovers."
+      sell_strength:
+        min_daily_pct: 10.0
+        min_5d_pct: 25.0
+      buy_opportunity:
+        near_low_years: 1
+        near_low_tolerance_pct: 8.0
+        max_5d_pct: -15.0
+      fundamental_guardrail:
+        red_flags:
+          - "Subscriber growth or ARPU deteriorates materially"
+          - "Content costs rise faster than revenue"
+          - "Cash flow or balance sheet pressure worsens"
+          - "China ADR or regulatory risk materially worsens"
 
 market_indicators:
   - name: VIX
