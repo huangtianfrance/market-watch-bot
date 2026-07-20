@@ -53,6 +53,131 @@ stocks:
           - "Liquidity tightens sharply due to hawkish Fed, rising real yields, or credit stress"
           - "Stablecoin or major exchange stress creates systemic crypto liquidity risk"
 
+  - name: Samsung Electronics
+    ticker: 005930.KS
+    position: 0
+    currency: KRW
+    notes: "Watchlist: Korea semiconductor/memory cycle leader."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 7.0, max_5d_pct: -10.0}
+      fundamental_guardrail:
+        red_flags:
+          - "Memory cycle recovery fails or pricing weakens materially"
+          - "HBM/AI memory competitiveness weakens versus SK Hynix or Micron"
+          - "Foundry losses or capex pressure materially worsen"
+
+  - name: SpaceX
+    ticker: SPCX
+    position: 0
+    disabled: true
+    currency: USD
+    notes: "Private company. Do not use SPCX as a reliable SpaceX price feed; monitor manually or via private-market marks."
+
+  - name: LVMH
+    ticker: MC.PA
+    position: 0
+    currency: EUR
+    notes: "Watchlist: luxury leader; suitable only after luxury sentiment washout or China/US demand reset."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 3, near_low_tolerance_pct: 6.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags:
+          - "Fashion & leather goods organic growth deteriorates materially"
+          - "China or U.S. luxury demand weakens beyond current expectations"
+          - "Margins are structurally reset lower"
+
+  - name: UBS
+    ticker: UBS
+    position: 0
+    currency: USD
+    notes: "Watchlist: global bank/wealth management; sensitive to credit cycle and rates."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 6.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags:
+          - "Credit Suisse integration costs or litigation risk materially worsen"
+          - "Capital ratio or buyback capacity deteriorates"
+          - "Credit losses rise materially"
+
+  - name: Apple
+    ticker: AAPL
+    position: 0
+    currency: USD
+    notes: "Watchlist: quality mega-cap; buy signals should require valuation reset or AI/iPhone thesis intact."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 5.0, max_5d_pct: -7.0}
+      fundamental_guardrail:
+        red_flags:
+          - "iPhone demand or services growth weakens materially"
+          - "AI product cycle fails to support upgrade demand"
+          - "China/regulatory pressure materially impairs growth"
+
+  - name: Meta
+    ticker: META
+    position: 0
+    currency: USD
+    notes: "Watchlist: AI ads + social platforms; high quality but sentiment can swing on capex."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 5.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags:
+          - "Ad growth decelerates materially"
+          - "AI/metaverse capex rises without revenue evidence"
+          - "Regulatory or antitrust risk materially worsens"
+
+  - name: Tesla
+    ticker: TSLA
+    position: 0
+    currency: USD
+    notes: "Watchlist: high beta EV/AI/robotics narrative; only buy on panic with thesis intact."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 8.0, max_5d_pct: -12.0}
+      fundamental_guardrail:
+        red_flags:
+          - "EV margins or delivery growth deteriorate materially"
+          - "Robotaxi/FSD/robotics milestones lose credibility"
+          - "Balance sheet or brand risk worsens materially"
+
+  - name: Bank of America
+    ticker: BAC
+    position: 0
+    currency: USD
+    notes: "Watchlist: U.S. bank; useful as rate/credit cycle opportunity."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 6.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags:
+          - "Credit losses, deposit costs, or unrealized bond losses materially worsen"
+          - "Capital return capacity deteriorates"
+
+  - name: SAP
+    ticker: SAP.DE
+    position: 0
+    currency: EUR
+    notes: "Watchlist: European enterprise software leader."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 5.0, max_5d_pct: -7.0}
+      fundamental_guardrail:
+        red_flags:
+          - "Cloud backlog or margin expansion misses materially"
+          - "AI monetization fails to support premium valuation"
+
   - name: Airbus
     ticker: AIR.PA
     position: 18
@@ -138,6 +263,42 @@ stocks:
           - "Major regulatory or antitrust action changes business outlook"
           - "OpenAI partnership economics materially worsen"
 
+  - name: Leonardo
+    ticker: LDO.MI
+    position: 0
+    currency: EUR
+    notes: "Watchlist: European defense/aerospace."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 6.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags: ["Defense order momentum, margins, or leverage deteriorate materially"]
+
+  - name: Safran
+    ticker: SAF.PA
+    position: 0
+    currency: EUR
+    notes: "Watchlist: aerospace engines/equipment; quality compounder, often expensive."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 5.0, max_5d_pct: -7.0}
+      fundamental_guardrail:
+        red_flags: ["Engine aftermarket growth, supply chain, or margin outlook deteriorates materially"]
+
+  - name: Inditex
+    ticker: ITX.MC
+    position: 0
+    currency: EUR
+    notes: "Watchlist: global apparel leader."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 5.0, max_5d_pct: -7.0}
+      fundamental_guardrail:
+        red_flags: ["Sales momentum, inventory discipline, or margins deteriorate materially"]
+
   - name: PDD
     ticker: PDD
     position: 10
@@ -163,6 +324,391 @@ stocks:
           - "Margins collapse due to subsidies, tariffs, logistics or regulation"
           - "U.S./EU regulatory pressure on Temu materially worsens"
           - "China consumer data or platform competition weakens the thesis"
+
+  - name: Veolia
+    ticker: VIE.PA
+    position: 0
+    currency: EUR
+    notes: "Watchlist: defensive utilities/environmental services."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 5.0, max_5d_pct: -6.0}
+      fundamental_guardrail:
+        red_flags: ["Debt, regulation, or utility-like earnings stability deteriorates materially"]
+
+  - name: Michelin
+    ticker: ML.PA
+    position: 0
+    currency: EUR
+    notes: "Watchlist: industrial/auto supplier, cyclical."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 6.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags: ["Auto/industrial demand or pricing power deteriorates materially"]
+
+  - name: Groupe ADP
+    ticker: ADP.PA
+    position: 0
+    currency: EUR
+    notes: "Watchlist: airport operator, travel infrastructure."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 6.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags: ["Passenger traffic, regulation, or concession economics deteriorate materially"]
+
+  - name: Rolls-Royce
+    ticker: RR.L
+    position: 0
+    currency: GBX
+    notes: "Watchlist: aerospace engines/defense, high momentum cyclical."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 7.0, max_5d_pct: -10.0}
+      fundamental_guardrail:
+        red_flags: ["Engine flying hours, defense, cash flow, or margin outlook deteriorates materially"]
+
+  - name: ING
+    ticker: INGA.AS
+    position: 0
+    currency: EUR
+    notes: "Watchlist: European bank."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 6.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags: ["Credit losses, NII, capital ratio, or buyback outlook deteriorates materially"]
+
+  - name: TotalEnergies
+    ticker: TTE.PA
+    position: 0
+    currency: EUR
+    notes: "Watchlist: integrated energy."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 6.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags: ["Oil/gas cash flow, balance sheet, or shareholder return policy deteriorates materially"]
+
+  - name: Siemens
+    ticker: SIE.DE
+    position: 0
+    currency: EUR
+    notes: "Watchlist: industrial automation/electrification."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 5.0, max_5d_pct: -7.0}
+      fundamental_guardrail:
+        red_flags: ["Automation demand, China exposure, or margin outlook deteriorates materially"]
+
+  - name: BAE Systems
+    ticker: BA.L
+    position: 0
+    currency: GBX
+    notes: "Watchlist: defense compounder."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 5.0, max_5d_pct: -7.0}
+      fundamental_guardrail:
+        red_flags: ["Defense budget/order momentum or execution deteriorates materially"]
+
+  - name: ExxonMobil
+    ticker: XOM
+    position: 0
+    currency: USD
+    notes: "Watchlist: integrated energy."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 6.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags: ["Oil/gas cash flow, capex discipline, or shareholder return policy deteriorates materially"]
+
+  - name: Dassault Systemes
+    ticker: DSY.PA
+    position: 0
+    currency: EUR
+    notes: "Watchlist: French software; valuation-sensitive."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 6.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags: ["Software growth, renewals, or margins deteriorate materially"]
+
+  - name: General Electric
+    ticker: GE
+    position: 0
+    currency: USD
+    notes: "Watchlist: aerospace/industrial."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 6.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags: ["Aerospace orders, margins, or cash flow deteriorate materially"]
+
+  - name: Caterpillar
+    ticker: CAT
+    position: 0
+    currency: USD
+    notes: "Watchlist: industrial/cyclical."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 6.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags: ["Construction/mining demand, margins, or dealer inventory deteriorates materially"]
+
+  - name: Societe Generale
+    ticker: GLE.PA
+    position: 0
+    currency: EUR
+    notes: "Watchlist: European bank, higher beta."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 7.0, max_5d_pct: -9.0}
+      fundamental_guardrail:
+        red_flags: ["Capital, credit losses, French political risk, or profitability deteriorates materially"]
+
+  - name: Thales
+    ticker: HO.PA
+    position: 0
+    currency: EUR
+    notes: "Watchlist: defense/electronics/cyber."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 5.0, max_5d_pct: -7.0}
+      fundamental_guardrail:
+        red_flags: ["Defense/cyber order growth or execution deteriorates materially"]
+
+  - name: BNP Paribas
+    ticker: BNP.PA
+    position: 0
+    currency: EUR
+    notes: "Watchlist: prior successful trade; European bank."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 6.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags: ["Credit losses, NII, capital return, or French political risk deteriorates materially"]
+
+  - name: Rheinmetall
+    ticker: RHM.DE
+    position: 0
+    currency: EUR
+    notes: "Watchlist: defense high momentum."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 7.0, max_5d_pct: -10.0}
+      fundamental_guardrail:
+        red_flags: ["Defense orders, margins, execution, or valuation support deteriorates materially"]
+
+  - name: Amazon
+    ticker: AMZN
+    position: 0
+    currency: USD
+    notes: "Watchlist: AWS/AI + retail."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 5.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags: ["AWS growth, AI capex return, retail margins, or regulation deteriorates materially"]
+
+  - name: Lockheed Martin
+    ticker: LMT
+    position: 0
+    currency: USD
+    notes: "Watchlist: U.S. defense."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 5.0, max_5d_pct: -7.0}
+      fundamental_guardrail:
+        red_flags: ["Defense budget, execution, or program risk deteriorates materially"]
+
+  - name: ASML
+    ticker: ASML.AS
+    position: 0
+    currency: EUR
+    notes: "Watchlist: semiconductor equipment monopoly-like leader; AI cycle sensitive."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 7.0, max_5d_pct: -10.0}
+      fundamental_guardrail:
+        red_flags: ["Orders, China restrictions, or leading-edge lithography demand deteriorates materially"]
+
+  - name: Pony AI
+    ticker: PONY
+    position: 0
+    currency: USD
+    notes: "Watchlist: speculative autonomy/robotaxi ADR."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 10.0, max_5d_pct: -15.0}
+      fundamental_guardrail:
+        red_flags: ["Autonomy commercialization, cash runway, dilution, or regulatory risk deteriorates materially"]
+
+  - name: Eaton
+    ticker: ETN
+    position: 0
+    currency: USD
+    notes: "Watchlist: electrification/data center infrastructure."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 6.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags: ["Data center/electrification orders or margins deteriorate materially"]
+
+  - name: TSMC Taiwan
+    ticker: 2330.TW
+    position: 0
+    currency: TWD
+    notes: "Watchlist: Taiwan-listed TSMC; AI semiconductor core."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 7.0, max_5d_pct: -10.0}
+      fundamental_guardrail:
+        red_flags: ["AI/HPC demand, gross margin, capex discipline, or geopolitical risk deteriorates materially"]
+
+  - name: Legrand
+    ticker: LR.PA
+    position: 0
+    currency: EUR
+    notes: "Watchlist: electrical/data center infrastructure."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 5.0, max_5d_pct: -7.0}
+      fundamental_guardrail:
+        red_flags: ["Data center/electrical demand, pricing, or margins deteriorate materially"]
+
+  - name: Schneider Electric
+    ticker: SU.PA
+    position: 0
+    currency: EUR
+    notes: "Watchlist: electrification, automation, AI power infrastructure."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 6.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags: ["Data center/electrification orders or margin outlook deteriorates materially"]
+
+  - name: Nvidia
+    ticker: NVDA
+    position: 0
+    currency: USD
+    notes: "Watchlist: AI leader, but crowded trade; buy only on sharp reset with thesis intact."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 10.0, max_5d_pct: -12.0}
+      fundamental_guardrail:
+        red_flags: ["AI GPU demand, margins, export controls, or hyperscaler capex materially deteriorates"]
+
+  - name: Broadcom
+    ticker: AVGO
+    position: 0
+    currency: USD
+    notes: "Watchlist: AI networking/custom silicon + software."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 8.0, max_5d_pct: -10.0}
+      fundamental_guardrail:
+        red_flags: ["AI networking/custom silicon demand or software integration deteriorates materially"]
+
+  - name: Vertiv
+    ticker: VRT
+    position: 0
+    currency: USD
+    notes: "Watchlist: data center power/cooling; very AI-capex sensitive."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 10.0, max_5d_pct: -12.0}
+      fundamental_guardrail:
+        red_flags: ["Data center order growth, margins, or AI capex outlook deteriorates materially"]
+
+  - name: Xiaomi
+    ticker: 1810.HK
+    position: 0
+    currency: HKD
+    notes: "Watchlist: China consumer tech/EV."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 8.0, max_5d_pct: -12.0}
+      fundamental_guardrail:
+        red_flags: ["Smartphone/EV margins, demand, or competition deteriorates materially"]
+
+  - name: Alibaba ADR
+    ticker: BABA
+    position: 0
+    currency: USD
+    notes: "Watchlist: China platform/cloud/e-commerce ADR."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 7.0, max_5d_pct: -10.0}
+      fundamental_guardrail:
+        red_flags: ["Cloud/e-commerce growth, margins, buybacks, or China regulation deteriorates materially"]
+
+  - name: Alphabet
+    ticker: GOOGL
+    position: 0
+    currency: USD
+    notes: "Watchlist: AI/search/cloud quality mega-cap."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 5.0, max_5d_pct: -8.0}
+      fundamental_guardrail:
+        red_flags: ["Search disruption, cloud growth, AI capex returns, or antitrust risk deteriorates materially"]
+
+  - name: Alibaba HK
+    ticker: 9988.HK
+    position: 0
+    currency: HKD
+    notes: "Watchlist: HK-listed Alibaba."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 7.0, max_5d_pct: -10.0}
+      fundamental_guardrail:
+        red_flags: ["Cloud/e-commerce growth, margins, buybacks, or China regulation deteriorates materially"]
+
+  - name: China Merchants Port
+    ticker: 0144.HK
+    position: 0
+    currency: HKD
+    notes: "Watchlist: port/infrastructure, China/HK value style."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 7.0, max_5d_pct: -10.0}
+      fundamental_guardrail:
+        red_flags: ["Port throughput, dividends, balance sheet, or China trade outlook deteriorates materially"]
+
 
   - name: Meituan
     ticker: 3690.HK
@@ -279,6 +825,42 @@ market_indicators:
     rules:
       watch_only: true
     notes: "Institutional Bitcoin access proxy. Watch price trend together with BTC and ETF flow news."
+
+  - name: Nikkei 225
+    ticker: ^N225
+    rules:
+      watch_only: true
+    notes: "Japan equity risk appetite and Asian liquidity proxy."
+
+  - name: FTSE 100
+    ticker: ^FTSE
+    rules:
+      watch_only: true
+    notes: "UK large-cap market proxy."
+
+  - name: DAX
+    ticker: ^GDAXI
+    rules:
+      watch_only: true
+    notes: "German/European industrial risk proxy."
+
+  - name: CAC 40
+    ticker: ^FCHI
+    rules:
+      watch_only: true
+    notes: "French equity market proxy."
+
+  - name: Hang Seng Index
+    ticker: ^HSI
+    rules:
+      watch_only: true
+    notes: "Hong Kong/China risk appetite proxy."
+
+  - name: EUR/CNY
+    ticker: EURCNY=X
+    rules:
+      watch_only: true
+    notes: "Currency proxy for China exposure and EUR-based investor returns."
 
   - name: VIX
     ticker: ^VIX

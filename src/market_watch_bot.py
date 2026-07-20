@@ -109,12 +109,34 @@ def bilingual(zh: str, en: str) -> str:
 
 def quote_snapshot(quote: Quote) -> str:
     ratio = volume_ratio(quote)
-    ratio_text = "n/a" if ratio is None else f"{ratio:.1f}x"
+    ratio_text = "n/a" if ratio is None else f"{ratio:.1f}倍"
     return (
-        f"价格/Price: {quote.last:.2f}; "
-        f"日涨跌/Day: {pct_line(quote.daily_pct)}; "
-        f"5日/5D: {pct_line(quote.five_day_pct)}; "
-        f"成交量/Volume: {ratio_text} 20日均量/20D avg"
+        f"当前价格/Price: {quote.last:.2f}\n"
+        f"今天涨跌/Today: {pct_line(quote.daily_pct)}\n"
+        f"最近5个交易日/Last 5 trading days: {pct_line(quote.five_day_pct)}\n"
+        f"成交量/Volume: 约为20日平均成交量的 {ratio_text}\n"
+        f"说明/Plain English: 成交量可以理解为市场参与热度。价格变化配合放量，通常比单纯涨跌更值得看。"
+    )
+
+
+def explain_low_signal() -> str:
+    return (
+        "这类信号不是叫你马上买，而是在说：价格已经接近过去一段时间市场给过的低估/恐慌区。\n"
+        "下一步要看基本面有没有坏。如果公司逻辑没坏，这才可能是你偏好的低吸机会。"
+    )
+
+
+def explain_rerating_signal() -> str:
+    return (
+        "“市场确认的重估”意思是：不只是新闻好听，而是价格明显上涨、成交量也明显放大，说明有真实资金在重新定价。\n"
+        "这种信号更适合做研究确认，不适合闭眼追高。"
+    )
+
+
+def explain_rotation_signal() -> str:
+    return (
+        "这是一个调仓观察，不是自动交易指令。\n"
+        "逻辑是：把一只已经走强、适合卖一点的持仓，和另一只进入低位机会的标的配对，看看是否值得换一小部分仓位。"
     )
 
 
@@ -132,20 +154,33 @@ def history_window_min(quote: Quote, years: int) -> Optional[float]:
 def check_stock_rules(stock: Dict[str, Any], quote: Quote, global_rules: Dict[str, Any]) -> List[str]:
     alerts: List[str] = []
     name = stock["name"]
+    is_held = stock.get("position", 0) > 0
 
-    if quote.daily_pct >= global_rules["stock_big_up_daily_pct"]:
+    if is_held and quote.daily_pct >= global_rules["stock_big_up_daily_pct"]:
         alerts.append(
             bilingual(
-                f"{name} 大涨：单日上涨 {quote.daily_pct:+.2f}%。",
-                f"{name} big rally: single-day gain {quote.daily_pct:+.2f}%.",
+                (
+                    f"{name} 今天涨得比较猛，单日上涨 {quote.daily_pct:+.2f}%。\n"
+                    f"这类信号更偏向你的“上涨时考虑卖一点”规则。可以看看是不是到了减仓/换仓区，而不是继续追。"
+                ),
+                (
+                    f"{name} had a strong rally today, up {quote.daily_pct:+.2f}%.\n"
+                    f"This fits your strength-selling discipline. Consider whether this is a trim/rotation zone rather than a chase signal."
+                ),
             )
         )
 
-    if quote.five_day_pct is not None and quote.five_day_pct >= global_rules["stock_big_up_5d_pct"]:
+    if is_held and quote.five_day_pct is not None and quote.five_day_pct >= global_rules["stock_big_up_5d_pct"]:
         alerts.append(
             bilingual(
-                f"{name} 连续走强：5日上涨 {quote.five_day_pct:+.2f}%。",
-                f"{name} sustained strength: 5-day gain {quote.five_day_pct:+.2f}%.",
+                (
+                    f"{name} 最近几天连续走强，5个交易日涨了 {quote.five_day_pct:+.2f}%。\n"
+                    f"这说明不是一天的随机波动，可能已经有一波资金在推。可以考虑是否把部分利润换到更低位的机会里。"
+                ),
+                (
+                    f"{name} has shown sustained strength, up {quote.five_day_pct:+.2f}% over 5 trading days.\n"
+                    f"This is less likely to be a one-day blip. Consider whether part of the gain should be rotated into a cheaper opportunity."
+                ),
             )
         )
 
@@ -156,8 +191,16 @@ def check_stock_rules(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
     if rerating_volume and (rerating_daily or rerating_5d):
         alerts.append(
             bilingual(
-                f"{name} 可能出现基本面重估并被市场确认：价格大涨且成交量达到 {ratio:.1f} 倍20日均量。请检查财报、指引、订单、监管或管理层消息。",
-                f"{name} may be undergoing a market-confirmed fundamental re-rating: strong price move with volume at {ratio:.1f}x the 20-day average. Check earnings, guidance, orders, regulation, or management news.",
+                (
+                    f"{name} 可能出现“市场确认的重估”。简单说：价格涨得明显，成交量也放大到20日均量的 {ratio:.1f} 倍。\n"
+                    f"{explain_rerating_signal()}\n"
+                    f"下一步：检查是不是有财报、业绩指引、订单、监管变化或管理层表态支撑。"
+                ),
+                (
+                    f"{name} may be seeing a market-confirmed re-rating: price moved strongly and volume reached {ratio:.1f}x the 20-day average.\n"
+                    f"In plain English, this means real money may be repricing the stock, not just reacting to a headline.\n"
+                    f"Next step: check earnings, guidance, orders, regulation, or management commentary."
+                ),
             )
         )
 
@@ -167,8 +210,15 @@ def check_stock_rules(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
         if low is not None and quote.last <= low * tolerance:
             alerts.append(
                 bilingual(
-                    f"{name} 接近{years}年历史低位：当前 {quote.last:.2f}，{years}年低点约 {low:.2f}。",
-                    f"{name} is near a {years}-year low: current {quote.last:.2f}, {years}-year low about {low:.2f}.",
+                    (
+                        f"{name} 已经接近 {years} 年低位。当前价格 {quote.last:.2f}，{years} 年低点大约 {low:.2f}。\n"
+                        f"{explain_low_signal()}\n"
+                        f"可做决策：加入重点研究清单；如果基本面没破，可以考虑小仓分批，而不是一次性重仓。"
+                    ),
+                    (
+                        f"{name} is near a {years}-year low. Current price is {quote.last:.2f}; the {years}-year low is about {low:.2f}.\n"
+                        f"This is a research signal, not an automatic buy. If the thesis is intact, consider staged entry rather than one large trade."
+                    ),
                 )
             )
 
@@ -184,8 +234,15 @@ def check_indicator_rules(indicator: Dict[str, Any], quote: Quote) -> List[str]:
     if extreme_fear is not None and quote.last >= extreme_fear:
         alerts.append(
             bilingual(
-                f"{name} 进入极度恐慌区：当前 {quote.last:.2f}，阈值 {extreme_fear}。",
-                f"{name} is in extreme-fear territory: current {quote.last:.2f}, threshold {extreme_fear}.",
+                (
+                    f"{name} 进入极度恐慌区，当前 {quote.last:.2f}，触发线是 {extreme_fear}。\n"
+                    f"简单说：市场开始愿意花更多钱买保护，说明大家明显害怕下跌。\n"
+                    f"可做决策：这更接近你的恐慌买入环境，但仍要优先挑基本面没坏、只是被一起杀下来的标的。"
+                ),
+                (
+                    f"{name} entered extreme-fear territory: current {quote.last:.2f}, threshold {extreme_fear}.\n"
+                    f"In plain English, investors are paying more for downside protection. This can fit your panic-buy setup, but only for stocks whose fundamentals remain intact."
+                ),
             )
         )
 
@@ -193,8 +250,15 @@ def check_indicator_rules(indicator: Dict[str, Any], quote: Quote) -> List[str]:
     if extreme_greed is not None and quote.last <= extreme_greed:
         alerts.append(
             bilingual(
-                f"{name} 进入极度贪婪/极度自满区：当前 {quote.last:.2f}，阈值 {extreme_greed}。",
-                f"{name} is in extreme-greed / extreme-complacency territory: current {quote.last:.2f}, threshold {extreme_greed}.",
+                (
+                    f"{name} 进入极度贪婪/自满区，当前 {quote.last:.2f}，触发线是 {extreme_greed}。\n"
+                    f"简单说：市场太放松，大家不怎么害怕风险。\n"
+                    f"可做决策：这通常不是追高的好环境，更适合检查哪些持仓涨多了、是否要卖一点。"
+                ),
+                (
+                    f"{name} entered extreme-greed / complacency territory: current {quote.last:.2f}, threshold {extreme_greed}.\n"
+                    f"In plain English, the market is very relaxed about risk. This is usually a better time to review trims than to chase."
+                ),
             )
         )
 
@@ -210,8 +274,15 @@ def check_sentiment_index_rules(indicator: Dict[str, Any], sentiment: SentimentI
     if extreme_fear is not None and sentiment.value <= extreme_fear:
         alerts.append(
             bilingual(
-                f"{name} 进入极度恐慌区：当前 {sentiment.value} ({sentiment.classification})，阈值 <= {extreme_fear}。",
-                f"{name} is in extreme-fear territory: current {sentiment.value} ({sentiment.classification}), threshold <= {extreme_fear}.",
+                (
+                    f"{name} 进入极度恐慌区：当前 {sentiment.value} ({sentiment.classification})，触发线 <= {extreme_fear}。\n"
+                    f"简单说：加密市场情绪很差，很多人在逃离风险。\n"
+                    f"可做决策：如果 BTC ETF 没有持续流出、监管和网络安全没有新雷，可以开始认真研究小仓分批。"
+                ),
+                (
+                    f"{name} entered extreme-fear territory: current {sentiment.value} ({sentiment.classification}), threshold <= {extreme_fear}.\n"
+                    f"In plain English, crypto sentiment is very weak. If ETF flows, regulation, and network security remain acceptable, this can be a staged-entry research signal."
+                ),
             )
         )
 
@@ -219,8 +290,15 @@ def check_sentiment_index_rules(indicator: Dict[str, Any], sentiment: SentimentI
     if fear_watch is not None and sentiment.value <= fear_watch:
         alerts.append(
             bilingual(
-                f"{name} 进入恐慌观察区：当前 {sentiment.value} ({sentiment.classification})，阈值 <= {fear_watch}。",
-                f"{name} is in fear-watch territory: current {sentiment.value} ({sentiment.classification}), threshold <= {fear_watch}.",
+                (
+                    f"{name} 进入恐慌观察区：当前 {sentiment.value} ({sentiment.classification})，触发线 <= {fear_watch}。\n"
+                    f"这还不一定是极端底部，但已经值得把 BTC 放到重点观察列表。\n"
+                    f"可做决策：先不急买，等价格也接近低位，或出现恐慌后不再创新低。"
+                ),
+                (
+                    f"{name} entered fear-watch territory: current {sentiment.value} ({sentiment.classification}), threshold <= {fear_watch}.\n"
+                    f"This is not necessarily a bottom, but BTC deserves closer attention. Wait for price confirmation or stabilization."
+                ),
             )
         )
 
@@ -228,8 +306,15 @@ def check_sentiment_index_rules(indicator: Dict[str, Any], sentiment: SentimentI
     if extreme_greed is not None and sentiment.value >= extreme_greed:
         alerts.append(
             bilingual(
-                f"{name} 进入极度贪婪区：当前 {sentiment.value} ({sentiment.classification})，阈值 >= {extreme_greed}。",
-                f"{name} is in extreme-greed territory: current {sentiment.value} ({sentiment.classification}), threshold >= {extreme_greed}.",
+                (
+                    f"{name} 进入极度贪婪区：当前 {sentiment.value} ({sentiment.classification})，触发线 >= {extreme_greed}。\n"
+                    f"简单说：加密市场情绪太热，追涨风险变高。\n"
+                    f"可做决策：如果你还没买 BTC，通常更适合等待；如果已经持有，才考虑是否卖一点。"
+                ),
+                (
+                    f"{name} entered extreme-greed territory: current {sentiment.value} ({sentiment.classification}), threshold >= {extreme_greed}.\n"
+                    f"In plain English, crypto sentiment is hot. If you do not own BTC yet, patience may be better than chasing."
+                ),
             )
         )
 
@@ -312,13 +397,17 @@ def guardrail_text(stock: Dict[str, Any]) -> str:
     return "\n".join(f"- {flag}" for flag in red_flags)
 
 
+def plain_reason_list(reasons: List[str]) -> str:
+    return "\n".join(f"- {reason}" for reason in reasons)
+
+
 def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> List[str]:
     engine = config.get("rotation_engine", {})
     if not engine.get("enabled", False):
         return []
 
     global_rules = config.get("global_rules", {})
-    all_stocks = config.get("stocks", [])
+    all_stocks = [stock for stock in config.get("stocks", []) if not stock.get("disabled")]
     sell_stocks = [stock for stock in all_stocks if stock.get("position", 0) > 0]
     buy_stocks = [
         stock
@@ -355,18 +444,20 @@ def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote])
             pairs.append(
                 bilingual(
                     (
-                        f"触发组合轮动观察：{from_stock['name']} → {to_stock['name']}。\n"
-                        f"建议动作：{action}\n"
-                        f"卖出候选理由：\n- " + "\n- ".join(from_reasons) + "\n"
-                        f"买入候选理由：\n- " + "\n- ".join(to_reasons) + "\n"
-                        f"执行前必须人工确认 {to_stock['name']} 基本面支撑仍在，尤其排除以下红旗：\n{guardrail_text(to_stock)}"
+                        f"我发现一个值得你看一眼的轮动机会：{from_stock['name']} → {to_stock['name']}。\n\n"
+                        f"{explain_rotation_signal()}\n\n"
+                        f"为什么可能卖一点 {from_stock['name']}：\n{plain_reason_list(from_reasons)}\n\n"
+                        f"为什么可能研究 {to_stock['name']}：\n{plain_reason_list(to_reasons)}\n\n"
+                        f"可以考虑的动作：先研究，不急着全仓切换。如果确认逻辑成立，通常更适合小比例试探或分批，而不是一次性大换仓。\n\n"
+                        f"执行前最重要的一步：确认 {to_stock['name']} 不是基本面坏了。请先排除这些红旗：\n{guardrail_text(to_stock)}"
                     ),
                     (
-                        f"Portfolio rotation watch triggered: {from_stock['name']} → {to_stock['name']}.\n"
-                        f"Suggested action: {action}\n"
-                        f"Sell-candidate reasons:\n- " + "\n- ".join(from_reasons) + "\n"
-                        f"Buy-candidate reasons:\n- " + "\n- ".join(to_reasons) + "\n"
-                        f"Before acting, manually confirm {to_stock['name']}'s fundamental support is still intact, especially excluding these red flags:\n{guardrail_text(to_stock)}"
+                        f"Portfolio rotation watch: {from_stock['name']} → {to_stock['name']}.\n\n"
+                        f"This is not an automatic trade. It means one holding looks strong enough to consider trimming, while another name looks cheap or washed out enough to research.\n\n"
+                        f"Why {from_stock['name']} may be a trim candidate:\n{plain_reason_list(from_reasons)}\n\n"
+                        f"Why {to_stock['name']} may be a buy candidate:\n{plain_reason_list(to_reasons)}\n\n"
+                        f"Possible decision: research first, then consider a small staged rotation only if the thesis is intact.\n\n"
+                        f"Before acting, check these red flags for {to_stock['name']}:\n{guardrail_text(to_stock)}"
                     ),
                 )
                 + f"\n\n{from_stock['name']} ({from_stock['ticker']})\n{quote_snapshot(from_quote)}"
@@ -436,6 +527,15 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
 
     lines.append(f"市场观察提醒 / Market Watch Alerts - {now}")
     lines.append("")
+    lines.append(
+        "这封邮件只在出现值得你看一眼的信号时发送。"
+        "我主要看价格位置、最近涨跌、成交量、历史低位、VIX/加密恐惧贪婪指数，以及组合里是否出现可轮动的配对。"
+    )
+    lines.append(
+        "This email is sent only when something worth reviewing appears. "
+        "The bot checks price level, recent moves, volume, historical lows, VIX/Crypto Fear & Greed, and possible portfolio rotation pairs."
+    )
+    lines.append("")
 
     global_rules = config.get("global_rules", {})
     quote_cache: Dict[str, Quote] = {}
@@ -470,7 +570,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
             )
 
     stock_alerts: List[str] = []
-    for stock in config.get("stocks", []):
+    for stock in [item for item in config.get("stocks", []) if not item.get("disabled")]:
         try:
             quote = get_quote(stock["ticker"], quote_cache)
             alerts = check_stock_rules(stock, quote, global_rules)
@@ -511,26 +611,26 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
             )
 
     if rotation_alerts:
-        lines.append("调仓信号 / Rotation Signals")
+        lines.append("可能的调仓动作 / Possible Rotation Decisions")
         lines.append("----------------------------")
         lines.append("\n\n".join(rotation_alerts))
         lines.append("")
 
     if stock_alerts:
-        lines.append("持仓股票 / Portfolio Stocks")
+        lines.append("个股机会或风险提示 / Stock-Level Signals")
         lines.append("--------------------------------")
         lines.append("\n\n".join(stock_alerts))
         lines.append("")
 
     if indicator_alerts:
-        lines.append("市场情绪 / Market Sentiment")
+        lines.append("市场情绪背景 / Market Sentiment Context")
         lines.append("----------------------------")
         lines.append("\n\n".join(indicator_alerts))
         lines.append("")
 
     if not rotation_alerts and not stock_alerts and not indicator_alerts:
-        lines.append("没有触发提醒。")
-        lines.append("No alerts were triggered.")
+        lines.append("今天没有值得打扰你的信号。继续观察就好。")
+        lines.append("No meaningful alerts were triggered today. Staying patient is fine.")
 
     return "\n".join(lines), triggered
 

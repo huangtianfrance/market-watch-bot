@@ -12,6 +12,31 @@ It checks your watchlist on a schedule and emails you when a rule is triggered:
 
 The report is intentionally alert-only and bilingual Chinese/English. It does not send routine portfolio summaries unless `send_email_when_no_alerts` is set to `true`.
 
+## Email Style
+
+Alert emails are written like a short investment memo, not a machine log. Each alert tries to explain:
+
+- what happened
+- why it matters
+- what the signal means in plain language
+- what decision may be worth considering
+- what fundamental red flags should be checked before acting
+
+Technical terms are explained briefly in the email. For example, volume is described as market participation/attention, and a market-confirmed re-rating is explained as price plus volume showing that real money may be repricing the asset.
+
+## Holdings vs Watchlist
+
+`position > 0` means the instrument is currently held. The bot can treat it as both:
+
+- a possible funding source when it shows sellable strength
+- a possible buy/add target when it enters a low-buy opportunity zone
+
+`position: 0` with `allow_as_target_when_not_held: true` means the instrument is on the watchlist only. It can appear as a possible buy target, but it will not be used as a funding source.
+
+For watchlist-only names, ordinary rallies are ignored. The bot focuses on buy-relevant signals such as being near historical lows, sharp selloffs, or market-confirmed fundamental re-ratings.
+
+Private companies such as SpaceX are marked `disabled: true` because there is no reliable public ticker for automatic Yahoo Finance monitoring.
+
 ## Default Alert Rules
 
 The default rules in `config/watchlist.yml` are tuned for low-frequency investing:
@@ -108,6 +133,7 @@ export EMAIL_TO=you@example.com
 
 The first config uses Yahoo Finance tickers:
 
+- Samsung Electronics: `005930.KS`
 - Airbus: `AIR.PA`
 - Oracle: `ORCL`
 - Microsoft: `MSFT`
@@ -119,6 +145,8 @@ The first config uses Yahoo Finance tickers:
 - JD Hong Kong: `9618.HK`
 - NIO: `NIO`
 - iQIYI: `IQ`
+
+Major index and FX proxies include `^N225`, `^FTSE`, `^GDAXI`, `^FCHI`, `^HSI`, and `EURCNY=X`.
 
 If your broker holds ADRs instead of Hong Kong shares, replace the HK tickers with U.S. ADR tickers where applicable.
 
