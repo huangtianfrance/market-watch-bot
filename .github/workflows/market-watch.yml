@@ -2,8 +2,8 @@ name: Market Watch
 
 on:
   schedule:
-    # 14:45 UTC = 16:45 Paris summer time. Adjust if you prefer U.S. market close.
-    - cron: "45 14 * * 1-5"
+    # 07:00 UTC = 09:00 Paris summer time. GitHub cron uses UTC and does not adjust for DST.
+    - cron: "0 7 * * *"
   workflow_dispatch:
 
 jobs:
