@@ -16,6 +16,15 @@ data_fetch:
   include_successful_fetches: false
   note: "Polite pacing, retry with backoff, per-run cache, and data quality reporting."
 
+news_search:
+  enabled: true
+  provider: GDELT DOC API
+  lookback: 14d
+  max_red_flags_per_stock: 3
+  max_articles_per_stock: 5
+  request_pause_seconds: 3.0
+  note: "Only checks red flags for triggered rotation targets. Results are evidence prompts, not automatic truth judgments."
+
 global_rules:
   stock_big_up_daily_pct: 5.0
   stock_big_up_5d_pct: 10.0

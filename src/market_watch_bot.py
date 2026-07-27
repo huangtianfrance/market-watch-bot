@@ -3,11 +3,13 @@ import json
 import os
 import smtplib
 import time
+import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.message import EmailMessage
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import yaml
 import yfinance as yf
@@ -49,6 +51,8 @@ class DataQuality:
 
 
 DATA_QUALITY_LOG: List[DataQuality] = []
+ROTATION_TARGET_TICKERS: Set[str] = set()
+NEWS_CHECK_CACHE: Dict[str, str] = {}
 FETCH_SETTINGS: Dict[str, Any] = {
     "request_pause_seconds": 0.7,
     "max_retries": 3,
@@ -58,12 +62,21 @@ FETCH_SETTINGS: Dict[str, Any] = {
     "include_quality_report": True,
     "include_successful_fetches": True,
 }
+NEWS_SEARCH_SETTINGS: Dict[str, Any] = {
+    "enabled": False,
+    "provider": "GDELT DOC API",
+    "lookback": "14d",
+    "max_red_flags_per_stock": 3,
+    "max_articles_per_stock": 5,
+    "request_pause_seconds": 3.0,
+}
 
 
 def load_config(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
     FETCH_SETTINGS.update(config.get("data_fetch", {}))
+    NEWS_SEARCH_SETTINGS.update(config.get("news_search", {}))
     return config
 
 
@@ -335,6 +348,226 @@ def quote_snapshot(quote: Quote) -> str:
     )
 
 
+def quote_metrics_inline(quote: Quote) -> str:
+    ratio = volume_ratio(quote)
+    ratio_text = "n/a" if ratio is None else f"{ratio:.1f}x"
+    return f"{quote.last:.2f}; 今日 {pct_line(quote.daily_pct)}; 5日 {pct_line(quote.five_day_pct)}; 量 {ratio_text}"
+
+
+def table_cell(text: str) -> str:
+    return text.replace("\n", "<br>").replace("|", "/")
+
+
+def markdown_table(headers: List[str], rows: List[List[str]]) -> str:
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join(["---"] * len(headers)) + " |",
+    ]
+    for row in rows:
+        lines.append("| " + " | ".join(table_cell(item) for item in row) + " |")
+    return "\n".join(lines)
+
+
+def short_reasons(reasons: List[str]) -> str:
+    return "<br>".join(reasons)
+
+
+def first_guardrails(stock: Dict[str, Any], limit: int = 3) -> str:
+    red_flags = stock.get("rotation", {}).get("fundamental_guardrail", {}).get("red_flags", [])
+    if not red_flags:
+        return "暂无特别红旗 / no specific red flags configured"
+    shown = red_flags[:limit]
+    suffix = "" if len(red_flags) <= limit else f"<br>另有 {len(red_flags) - limit} 项，交易前再展开复核"
+    return "<br>".join(f"- {flag}" for flag in shown) + suffix
+
+
+def trim_text(text: str, max_len: int = 120) -> str:
+    cleaned = " ".join(str(text).split())
+    if len(cleaned) <= max_len:
+        return cleaned
+    return cleaned[: max_len - 3] + "..."
+
+
+def gdelt_articles_for_query(query: str, max_records: int, lookback: str) -> List[Dict[str, Any]]:
+    params = urllib.parse.urlencode(
+        {
+            "query": query,
+            "mode": "artlist",
+            "format": "json",
+            "maxrecords": max_records,
+            "sort": "hybrid",
+            "timespan": lookback,
+        }
+    )
+    url = f"https://api.gdeltproject.org/api/v2/doc/doc?{params}"
+    request = urllib.request.Request(url, headers={"User-Agent": "market-watch-bot/1.0"})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    return payload.get("articles", []) or []
+
+
+def google_news_rss_articles_for_query(query: str, max_records: int) -> List[Dict[str, Any]]:
+    params = urllib.parse.urlencode(
+        {
+            "q": query,
+            "hl": "en-US",
+            "gl": "US",
+            "ceid": "US:en",
+        }
+    )
+    url = f"https://news.google.com/rss/search?{params}"
+    request = urllib.request.Request(url, headers={"User-Agent": "market-watch-bot/1.0"})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        root = ET.fromstring(response.read())
+    articles: List[Dict[str, Any]] = []
+    for item in root.findall("./channel/item")[:max_records]:
+        link = item.findtext("link", default="")
+        title = item.findtext("title", default="Untitled")
+        source_node = item.find("source")
+        domain = source_node.text if source_node is not None and source_node.text else "Google News"
+        articles.append({"title": title, "url": link, "domain": domain})
+    return articles
+
+
+def news_articles_for_query(query: str, max_records: int, lookback: str) -> Tuple[List[Dict[str, Any]], str, List[str]]:
+    try:
+        return gdelt_articles_for_query(query, max_records, lookback), "GDELT DOC API news search", []
+    except Exception as gdelt_exc:
+        articles = google_news_rss_articles_for_query(query, max_records)
+        warning = "主新闻源限流或失败，已使用 Google News RSS 备用源 / primary news source failed, fallback used"
+        return articles, "Google News RSS fallback", [warning]
+
+
+def red_flag_keywords(red_flags: List[str]) -> List[str]:
+    stopwords = {
+        "materially",
+        "worsens",
+        "worsen",
+        "deteriorates",
+        "deteriorate",
+        "current",
+        "without",
+        "support",
+        "business",
+        "growth",
+        "risk",
+        "risks",
+    }
+    keywords: List[str] = []
+    for flag in red_flags:
+        for raw_word in flag.replace("/", " ").replace("-", " ").split():
+            word = "".join(char for char in raw_word.lower() if char.isalnum())
+            if len(word) < 5 or word in stopwords:
+                continue
+            if word not in keywords:
+                keywords.append(word)
+    return keywords[:10]
+
+
+def article_evidence_text(article: Dict[str, Any]) -> str:
+    title = trim_text(article.get("title", "Untitled"), 80)
+    domain = article.get("domain") or article.get("sourceCountry") or "source"
+    return f"{title} ({domain})".strip()
+
+
+def article_matches_flag(article: Dict[str, Any], flag: str) -> bool:
+    text = f"{article.get('title', '')} {article.get('seendate', '')} {article.get('domain', '')}".lower()
+    flag_words = red_flag_keywords([flag])
+    if not flag_words:
+        return False
+    matches = sum(1 for word in flag_words if word in text)
+    needed = 1 if len(flag_words) == 1 else 2
+    return matches >= needed
+
+
+def stock_news_query(stock: Dict[str, Any], red_flags: List[str]) -> str:
+    keywords = red_flag_keywords(red_flags)
+    query_terms = " OR ".join(keywords[:8]) if keywords else "risk OR guidance OR downgrade"
+    ticker_base = str(stock["ticker"]).split(".")[0].replace("-", " ")
+    return f'"{stock["name"]}" "{ticker_base}" ({query_terms})'
+
+
+def red_flag_news_check(stock: Dict[str, Any]) -> str:
+    if not NEWS_SEARCH_SETTINGS.get("enabled", False):
+        return first_guardrails(stock)
+
+    cache_key = stock["ticker"]
+    if cache_key in NEWS_CHECK_CACHE:
+        return NEWS_CHECK_CACHE[cache_key]
+
+    red_flags = stock.get("rotation", {}).get("fundamental_guardrail", {}).get("red_flags", [])
+    if not red_flags:
+        result = "暂无特别红旗 / no specific red flags configured"
+        NEWS_CHECK_CACHE[cache_key] = result
+        return result
+
+    max_flags = int(NEWS_SEARCH_SETTINGS.get("max_red_flags_per_stock", 3))
+    max_articles = int(NEWS_SEARCH_SETTINGS.get("max_articles_per_stock", 5))
+    lookback = str(NEWS_SEARCH_SETTINGS.get("lookback", "14d"))
+    pause = float(NEWS_SEARCH_SETTINGS.get("request_pause_seconds", 1.0))
+    shown_flags = red_flags[:max_flags]
+    query = stock_news_query(stock, shown_flags)
+
+    if pause > 0:
+        time.sleep(pause)
+    try:
+        articles, source, warnings = news_articles_for_query(query, max_articles, lookback)
+        log_quality(
+            DataQuality(
+                source=source,
+                symbol=f"NEWS:{stock['ticker']}",
+                status="ok",
+                rows=len(articles),
+                latest_date=lookback,
+                warnings=warnings,
+            )
+        )
+    except Exception as exc:
+        log_quality(
+            DataQuality(
+                source="GDELT DOC API news search",
+                symbol=f"NEWS:{stock['ticker']}",
+                status="failed",
+                warnings=["红旗新闻核查失败 / red-flag news check failed"],
+                error=str(exc),
+            )
+        )
+        result = "新闻核查失败，需要人工搜索 / news check failed, manual review needed"
+        NEWS_CHECK_CACHE[cache_key] = result
+        return result
+
+    rows: List[str] = []
+    for index, flag in enumerate(shown_flags, start=1):
+        matched_articles = [article for article in articles if article_matches_flag(article, flag)]
+        evidence_articles = matched_articles[:2]
+        if not articles:
+            rows.append(
+                f"{index}) {trim_text(flag, 70)}：未发现公开新闻证据 / no public-news evidence found"
+            )
+            continue
+        if not evidence_articles:
+            rows.append(
+                f"{index}) {trim_text(flag, 70)}：未发现直接匹配证据 / no direct evidence in broad news scan"
+            )
+            continue
+
+        evidence = []
+        for article in evidence_articles:
+            evidence.append(article_evidence_text(article))
+        rows.append(
+            f"{index}) {trim_text(flag, 70)}：疑似线索，需人工复核 / possible signal, review manually<br>"
+            f"证据 / Evidence: " + "<br>".join(evidence)
+        )
+
+    extra_count = len(red_flags) - max_flags
+    if extra_count > 0:
+        rows.append(f"另有 {extra_count} 条红旗未自动搜索；交易前人工展开 / {extra_count} more red flags not auto-searched.")
+
+    result = "<br>".join(rows)
+    NEWS_CHECK_CACHE[cache_key] = result
+    return result
+
+
 def explain_low_signal() -> str:
     return (
         "这不是直接买入指令，而是进入投研优先区：价格已经接近过去一段时间市场给过的低估/恐慌区。\n"
@@ -441,6 +674,65 @@ def check_stock_rules(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
             )
 
     return alerts
+
+
+def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[str, Any]) -> List[List[str]]:
+    rows: List[List[str]] = []
+    name = stock["name"]
+    is_held = stock.get("position", 0) > 0
+
+    if is_held and quote.daily_pct >= global_rules["stock_big_up_daily_pct"]:
+        rows.append(
+            [
+                f"{name} ({stock['ticker']})",
+                "持仓大涨 / held strength",
+                quote_metrics_inline(quote),
+                f"单日上涨 {quote.daily_pct:+.2f}%，符合你的强势日检查纪律",
+                "不追高；检查是否减一点、锁利润，或换入更低位标的",
+            ]
+        )
+
+    if is_held and quote.five_day_pct is not None and quote.five_day_pct >= global_rules["stock_big_up_5d_pct"]:
+        rows.append(
+            [
+                f"{name} ({stock['ticker']})",
+                "持仓连续走强 / 5d strength",
+                quote_metrics_inline(quote),
+                f"5个交易日上涨 {quote.five_day_pct:+.2f}%，不是单日随机波动",
+                "评估是否把一小部分利润轮动出去",
+            ]
+        )
+
+    ratio = volume_ratio(quote)
+    rerating_volume = ratio is not None and ratio >= global_rules["confirmed_rerating_volume_ratio_min"]
+    rerating_daily = quote.daily_pct >= global_rules["confirmed_rerating_daily_pct"]
+    rerating_5d = quote.five_day_pct is not None and quote.five_day_pct >= global_rules["confirmed_rerating_5d_pct"]
+    if rerating_volume and (rerating_daily or rerating_5d):
+        rows.append(
+            [
+                f"{name} ({stock['ticker']})",
+                "市场确认重估 / re-rating",
+                quote_metrics_inline(quote),
+                f"价格强势且成交量约 {ratio:.1f}x，说明有真实资金参与",
+                "提高研究优先级；确认财报、订单、指引或监管变化是否支撑",
+            ]
+        )
+
+    tolerance = 1 + global_rules["historic_low_tolerance_pct"] / 100
+    for years in global_rules.get("historic_low_lookback_years", []):
+        low = history_window_min(quote, int(years))
+        if low is not None and quote.last <= low * tolerance:
+            rows.append(
+                [
+                    f"{name} ({stock['ticker']})",
+                    f"接近{years}年低位 / near {years}Y low",
+                    quote_metrics_inline(quote),
+                    f"当前 {quote.last:.2f}，{years}年低点约 {low:.2f}",
+                    "进入投研优先区；先判断是错杀还是价值陷阱，再考虑分批",
+                ]
+            )
+
+    return rows
 
 
 def check_indicator_rules(indicator: Dict[str, Any], quote: Quote) -> List[str]:
@@ -620,6 +912,7 @@ def plain_reason_list(reasons: List[str]) -> str:
 
 
 def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> List[str]:
+    ROTATION_TARGET_TICKERS.clear()
     engine = config.get("rotation_engine", {})
     if not engine.get("enabled", False):
         return []
@@ -647,44 +940,69 @@ def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote])
         if buy_reasons:
             buy_candidates.append((stock, quote, buy_reasons))
 
-    pairs: List[str] = []
+    pair_rows: List[List[str]] = []
     max_pairs = int(engine.get("max_pairs_per_email", 5))
     for from_stock, from_quote, from_reasons in sell_candidates:
         for to_stock, to_quote, to_reasons in buy_candidates:
             if from_stock["ticker"] == to_stock["ticker"]:
                 continue
-            if len(pairs) >= max_pairs:
+            if len(pair_rows) >= max_pairs:
                 break
-            action = engine.get(
-                "action_template",
-                "Review trimming a small tranche from the strength candidate and moving it into the opportunity candidate.",
+            ROTATION_TARGET_TICKERS.add(to_stock["ticker"])
+            target_is_held = "持仓加仓 / held add" if to_stock.get("position", 0) > 0 else "观察买入 / watchlist buy"
+            pair_rows.append(
+                [
+                    f"{from_stock['name']} ({from_stock['ticker']})",
+                    f"{to_stock['name']} ({to_stock['ticker']})",
+                    target_is_held,
+                    quote_metrics_inline(to_quote),
+                    short_reasons(to_reasons),
+                    red_flag_news_check(to_stock),
+                    "先人工复核；若基本面没破，只考虑小比例/分批",
+                ]
             )
-            pairs.append(
-                bilingual(
-                    (
-                        f"结论：出现一个需要 CEO 关注的组合轮动候选：{from_stock['name']} → {to_stock['name']}。\n\n"
-                        f"{explain_rotation_signal()}\n\n"
-                        f"为什么可能卖一点 {from_stock['name']}：\n{plain_reason_list(from_reasons)}\n\n"
-                        f"为什么可能研究 {to_stock['name']}：\n{plain_reason_list(to_reasons)}\n\n"
-                        f"建议动作：先进入人工复核，不建议直接全仓切换。如果确认逻辑成立，优先考虑小比例试探或分批轮动。\n\n"
-                        f"投前条件：确认 {to_stock['name']} 不是基本面坏了。请先排除这些红旗：\n{guardrail_text(to_stock)}"
-                    ),
-                    (
-                        f"Portfolio rotation watch: {from_stock['name']} → {to_stock['name']}.\n\n"
-                        f"This is not an automatic trade. It means one holding looks strong enough to consider trimming, while another name looks cheap or washed out enough to research.\n\n"
-                        f"Why {from_stock['name']} may be a trim candidate:\n{plain_reason_list(from_reasons)}\n\n"
-                        f"Why {to_stock['name']} may be a buy candidate:\n{plain_reason_list(to_reasons)}\n\n"
-                        f"Possible decision: research first, then consider a small staged rotation only if the thesis is intact.\n\n"
-                        f"Before acting, check these red flags for {to_stock['name']}:\n{guardrail_text(to_stock)}"
-                    ),
-                )
-                + f"\n\n{from_stock['name']} ({from_stock['ticker']})\n{quote_snapshot(from_quote)}"
-                + f"\n\n{to_stock['name']} ({to_stock['ticker']})\n{quote_snapshot(to_quote)}"
-            )
-        if len(pairs) >= max_pairs:
+        if len(pair_rows) >= max_pairs:
             break
 
-    return pairs
+    if not pair_rows:
+        return []
+
+    funding_rows = [
+        [
+            f"{stock['name']} ({stock['ticker']})",
+            quote_metrics_inline(quote),
+            short_reasons(reasons),
+        ]
+        for stock, quote, reasons in sell_candidates
+    ]
+    lines = [
+        f"结论：出现 {len(pair_rows)} 个轮动候选。核心不是同时买入多只股票，而是：有持仓走强，可考虑把少量资金转向低位机会。",
+        f"Conclusion: {len(pair_rows)} rotation candidates were triggered. This is a research list, not a trade order.",
+        "",
+        "资金来源候选 / Possible Funding Source",
+        markdown_table(["标的 / Name", "数据 / Data", "为什么可卖一点 / Trim reason"], funding_rows),
+        "",
+        "候选轮动表 / Rotation Candidate Table",
+        markdown_table(
+            [
+                "从 / From",
+                "到 / To",
+                "类型 / Type",
+                "目标数据 / Target data",
+                "机会理由 / Opportunity",
+                "红旗自动核查 / Red-flag check",
+                "建议动作 / Action",
+            ],
+            pair_rows,
+        ),
+        "",
+        "红旗核查口径：只对触发轮动的目标标的搜索；查询使用公司名 + ticker + 红旗关键词。结果是证据提示，不是自动定罪；未发现直接匹配不等于风险不存在。",
+        "Red-flag check scope: only triggered rotation targets are searched, using company name + ticker + risk keywords. Results are evidence prompts, not automatic truth judgments.",
+        "",
+        "口径解释：成交量是市场参与热度；价格下跌但放量，说明资金正在重新定价，需要确认是恐慌错杀还是基本面坏了。轮动只适合小比例、分批、人工复核。",
+        "Plain English: volume shows market participation. A selloff with volume means real money is repricing the stock, so verify whether it is panic or fundamental damage before acting.",
+    ]
+    return ["\n".join(lines)]
 
 
 def check_rotation_signal(signal: Dict[str, Any]) -> List[str]:
@@ -740,20 +1058,15 @@ def check_rotation_signal(signal: Dict[str, Any]) -> List[str]:
 
 def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
     DATA_QUALITY_LOG.clear()
+    ROTATION_TARGET_TICKERS.clear()
+    NEWS_CHECK_CACHE.clear()
     lines: List[str] = []
     triggered = False
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
     lines.append(f"CEO 投资简报 / CEO Investment Brief - {now}")
     lines.append("")
-    lines.append(
-        "汇报口径：本邮件只在出现值得 CEO 关注的投资信号时发送。"
-        "监控维度包括价格位置、近期涨跌、成交量、历史低位、VIX/加密恐惧贪婪指数，以及组合内可轮动配对。"
-    )
-    lines.append(
-        "Briefing standard: this email is sent only when a CEO-level investment signal appears. "
-        "The system checks price level, recent moves, volume, historical lows, VIX/Crypto Fear & Greed, and possible portfolio rotation pairs."
-    )
+    lines.append("汇报口径：只汇报可决策信号；同类信息合并，避免重复。/ Standard: decision-level signals only; similar items are grouped.")
     lines.append("")
 
     global_rules = config.get("global_rules", {})
@@ -788,17 +1101,19 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
                 )
             )
 
-    stock_alerts: List[str] = []
+    stock_rows: List[List[str]] = []
+    stock_errors: List[str] = []
     for stock in [item for item in config.get("stocks", []) if not item.get("disabled")]:
         try:
             quote = get_quote(stock["ticker"], quote_cache)
-            alerts = check_stock_rules(stock, quote, global_rules)
-            triggered = triggered or bool(alerts)
-            for alert in alerts:
-                stock_alerts.append(f"{stock['name']} ({stock['ticker']})\n{alert}\n{quote_snapshot(quote)}")
+            if stock["ticker"] in ROTATION_TARGET_TICKERS:
+                continue
+            rows = stock_signal_rows(stock, quote, global_rules)
+            triggered = triggered or bool(rows)
+            stock_rows.extend(rows)
         except Exception as exc:
             triggered = True
-            stock_alerts.append(
+            stock_errors.append(
                 bilingual(
                     f"{stock.get('name', stock.get('ticker'))} 数据获取失败：{exc}",
                     f"{stock.get('name', stock.get('ticker'))} data fetch failed: {exc}",
@@ -835,10 +1150,20 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append("\n\n".join(rotation_alerts))
         lines.append("")
 
-    if stock_alerts:
+    if stock_rows or stock_errors:
         lines.append("二、个股机会或风险提示 / Stock-Level Signals")
         lines.append("--------------------------------")
-        lines.append("\n\n".join(stock_alerts))
+        if stock_rows:
+            lines.append(
+                markdown_table(
+                    ["标的 / Name", "信号 / Signal", "数据 / Data", "解读 / Read", "可做决策 / Possible decision"],
+                    stock_rows,
+                )
+            )
+        if stock_errors:
+            lines.append("")
+            lines.append("数据异常 / Data exceptions")
+            lines.append("\n\n".join(stock_errors))
         lines.append("")
 
     if indicator_alerts:
@@ -847,7 +1172,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append("\n\n".join(indicator_alerts))
         lines.append("")
 
-    if not rotation_alerts and not stock_alerts and not indicator_alerts:
+    if not rotation_alerts and not stock_rows and not stock_errors and not indicator_alerts:
         lines.append("结论：今天没有达到 CEO 决策级别的信号。建议继续观察，不做动作。")
         lines.append("Conclusion: no CEO-level decision signal was triggered today. Recommendation: stay patient and take no action.")
 
