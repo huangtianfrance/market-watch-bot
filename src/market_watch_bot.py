@@ -53,6 +53,8 @@ class DataQuality:
 DATA_QUALITY_LOG: List[DataQuality] = []
 ROTATION_TARGET_TICKERS: Set[str] = set()
 NEWS_CHECK_CACHE: Dict[str, str] = {}
+INFLUENCER_CHECK_CACHE: Dict[str, str] = {}
+ROTATION_PAIR_CONTEXT: List[Tuple[str, str, str, str]] = []
 FETCH_SETTINGS: Dict[str, Any] = {
     "request_pause_seconds": 0.7,
     "max_retries": 3,
@@ -70,6 +72,14 @@ NEWS_SEARCH_SETTINGS: Dict[str, Any] = {
     "max_articles_per_stock": 5,
     "request_pause_seconds": 3.0,
 }
+INFLUENCER_WATCH_SETTINGS: Dict[str, Any] = {
+    "enabled": False,
+    "lookback": "7d",
+    "max_articles_per_influencer": 2,
+    "max_rotation_pairs_to_check": 3,
+    "request_pause_seconds": 3.0,
+    "people": [],
+}
 
 
 def load_config(path: str) -> Dict[str, Any]:
@@ -77,6 +87,7 @@ def load_config(path: str) -> Dict[str, Any]:
         config = yaml.safe_load(file)
     FETCH_SETTINGS.update(config.get("data_fetch", {}))
     NEWS_SEARCH_SETTINGS.update(config.get("news_search", {}))
+    INFLUENCER_WATCH_SETTINGS.update(config.get("influencer_watch", {}))
     return config
 
 
@@ -107,9 +118,14 @@ def fetch_quality_report() -> str:
         return ""
 
     ok_count = sum(1 for item in DATA_QUALITY_LOG if item.status == "ok")
-    warning_items = [item for item in DATA_QUALITY_LOG if item.warnings]
+    def is_fallback_only(item: DataQuality) -> bool:
+        warnings = item.warnings or []
+        return bool(warnings) and all("备用源" in warning or "fallback used" in warning for warning in warnings)
+
+    fallback_items = [item for item in DATA_QUALITY_LOG if is_fallback_only(item)]
+    warning_items = [item for item in DATA_QUALITY_LOG if item.warnings and not is_fallback_only(item)]
     failed_items = [item for item in DATA_QUALITY_LOG if item.status != "ok"]
-    warn_count = len(warning_items)
+    warn_count = len(warning_items) + len(fallback_items)
     fail_count = sum(1 for item in DATA_QUALITY_LOG if item.status != "ok")
     total_count = len(DATA_QUALITY_LOG)
     qualities_to_show = failed_items + [item for item in warning_items if item.status == "ok"]
@@ -123,7 +139,7 @@ def fetch_quality_report() -> str:
         quality_status = "有轻微警告 / minor warnings"
 
     lines = [
-        "四、数据获取质量 / Data Quality",
+        "数据获取质量 / Data Quality",
         "----------------------------",
         f"结论：本次数据质量 {quality_status}。",
         f"Summary: data quality this run was {quality_status}.",
@@ -132,6 +148,9 @@ def fetch_quality_report() -> str:
         "说明：这里只展开异常项。免费/公开接口可能有延迟、节假日缺口或个别 ticker 抓取失败；交易前仍应人工复核关键价格和新闻。",
         "Note: only exceptions are listed. Public/free data can be delayed or missing around holidays; verify key prices and news manually before trading.",
     ]
+    if fallback_items:
+        lines.append(f"新闻搜索提示：{len(fallback_items)} 次使用备用新闻源，属于降级成功，不影响行情数据。")
+        lines.append(f"News-search note: fallback source used {len(fallback_items)} times; this is degraded-but-successful, not a price-data failure.")
     if qualities_to_show:
         lines.append("")
         lines.append("异常项 / Exceptions:")
@@ -568,6 +587,143 @@ def red_flag_news_check(stock: Dict[str, Any]) -> str:
     return result
 
 
+def query_from_aliases(aliases: List[str], extra_terms: str = "") -> str:
+    quoted_aliases = [f'"{alias}"' for alias in aliases if alias]
+    alias_query = " OR ".join(quoted_aliases)
+    if extra_terms:
+        return f"({alias_query}) {extra_terms}"
+    return f"({alias_query})"
+
+
+def article_titles_summary(articles: List[Dict[str, Any]], max_items: int) -> str:
+    if not articles:
+        return "未发现最新公开动态 / no recent public item found"
+    return "<br>".join(article_evidence_text(article) for article in articles[:max_items])
+
+
+def stance_from_articles(articles: List[Dict[str, Any]]) -> str:
+    if not articles:
+        return "未发现 / not found"
+    text = " ".join(article.get("title", "") for article in articles).lower()
+    bullish_words = ["buy", "bull", "bullish", "breakout", "long", "accumulate", "leader", "strength"]
+    bearish_words = ["sell", "bear", "bearish", "short", "avoid", "crash", "breakdown", "risk", "loss"]
+    bullish = sum(1 for word in bullish_words if word in text)
+    bearish = sum(1 for word in bearish_words if word in text)
+    if bullish > bearish:
+        return "偏正面 / leaning positive"
+    if bearish > bullish:
+        return "偏谨慎 / leaning cautious"
+    return "有提及但态度不明确 / mentioned, unclear stance"
+
+
+def article_mentions_stock(article: Dict[str, Any], stock: Dict[str, Any]) -> bool:
+    text = f"{article.get('title', '')} {article.get('domain', '')}".lower()
+    ticker_base = str(stock.get("ticker", "")).split(".")[0].lower()
+    name_words = [word.lower() for word in str(stock.get("name", "")).replace("/", " ").split() if len(word) >= 4]
+    if ticker_base and ticker_base in text:
+        return True
+    return any(word in text for word in name_words)
+
+
+def fetch_public_commentary(query: str, symbol: str, max_records: int, lookback: str) -> List[Dict[str, Any]]:
+    try:
+        articles, source, warnings = news_articles_for_query(query, max_records, lookback)
+        log_quality(
+            DataQuality(
+                source=source,
+                symbol=symbol,
+                status="ok",
+                rows=len(articles),
+                latest_date=lookback,
+                warnings=warnings,
+            )
+        )
+        return articles
+    except Exception as exc:
+        log_quality(
+            DataQuality(
+                source="Public commentary news/RSS search",
+                symbol=symbol,
+                status="failed",
+                warnings=["公开观点搜索失败 / public commentary search failed"],
+                error=str(exc),
+            )
+        )
+        return []
+
+
+def influencer_latest_rows(config: Dict[str, Any]) -> List[List[str]]:
+    settings = config.get("influencer_watch", {})
+    if not settings.get("enabled", False):
+        return []
+
+    people = settings.get("people", [])
+    max_articles = int(settings.get("max_articles_per_influencer", 2))
+    lookback = str(settings.get("lookback", "7d"))
+    pause = float(settings.get("request_pause_seconds", 3.0))
+    rows: List[List[str]] = []
+
+    for person in people:
+        if pause > 0:
+            time.sleep(pause)
+        aliases = person.get("aliases", [person.get("name", "")])
+        query = query_from_aliases(aliases, person.get("topic_terms", "stock trading OR investing"))
+        cache_key = f"latest:{person.get('name')}:{query}"
+        if cache_key in INFLUENCER_CHECK_CACHE:
+            latest = INFLUENCER_CHECK_CACHE[cache_key]
+        else:
+            articles = fetch_public_commentary(query, f"INFL:{person.get('name', 'unknown')}", max_articles, lookback)
+            latest = article_titles_summary(articles, max_articles)
+            INFLUENCER_CHECK_CACHE[cache_key] = latest
+        rows.append(
+            [
+                person.get("name", ""),
+                person.get("background", ""),
+                person.get("core_view", ""),
+                latest,
+                "只作风格参考，不作为买卖指令 / style reference only",
+            ]
+        )
+    return rows
+
+
+def influencer_rotation_check(from_stock: Dict[str, Any], to_stock: Dict[str, Any], pair_index: int) -> str:
+    if not INFLUENCER_WATCH_SETTINGS.get("enabled", False):
+        return "未启用 / disabled"
+
+    max_pairs = int(INFLUENCER_WATCH_SETTINGS.get("max_rotation_pairs_to_check", 3))
+    if pair_index > max_pairs:
+        return "未自动搜索；超过本次组合核查上限 / not checked, pair limit reached"
+
+    people = INFLUENCER_WATCH_SETTINGS.get("people", [])
+    aliases: List[str] = []
+    for person in people:
+        aliases.extend(person.get("aliases", [person.get("name", "")]))
+    influencers_query = " OR ".join(f'"{alias}"' for alias in aliases[:16] if alias)
+    pair_terms = (
+        f'"{from_stock["name"]}" OR "{from_stock["ticker"]}" '
+        f'"{to_stock["name"]}" OR "{to_stock["ticker"]}"'
+    )
+    query = f"({influencers_query}) ({pair_terms})"
+    cache_key = f"rotation:{from_stock['ticker']}:{to_stock['ticker']}"
+    if cache_key in INFLUENCER_CHECK_CACHE:
+        return INFLUENCER_CHECK_CACHE[cache_key]
+
+    pause = float(INFLUENCER_WATCH_SETTINGS.get("request_pause_seconds", 3.0))
+    if pause > 0:
+        time.sleep(pause)
+    max_articles = int(INFLUENCER_WATCH_SETTINGS.get("max_articles_per_influencer", 2))
+    lookback = str(INFLUENCER_WATCH_SETTINGS.get("lookback", "7d"))
+    articles = fetch_public_commentary(query, f"INFL_ROT:{from_stock['ticker']}->{to_stock['ticker']}", max_articles, lookback)
+    articles = [article for article in articles if article_mentions_stock(article, to_stock)]
+    if not articles:
+        result = "未发现这些大V公开讨论该组合 / no tracked influencer comment found"
+    else:
+        result = f"{stance_from_articles(articles)}<br>{article_titles_summary(articles, max_articles)}"
+    INFLUENCER_CHECK_CACHE[cache_key] = result
+    return result
+
+
 def explain_low_signal() -> str:
     return (
         "这不是直接买入指令，而是进入投研优先区：价格已经接近过去一段时间市场给过的低估/恐慌区。\n"
@@ -913,6 +1069,7 @@ def plain_reason_list(reasons: List[str]) -> str:
 
 def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> List[str]:
     ROTATION_TARGET_TICKERS.clear()
+    ROTATION_PAIR_CONTEXT.clear()
     engine = config.get("rotation_engine", {})
     if not engine.get("enabled", False):
         return []
@@ -949,6 +1106,10 @@ def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote])
             if len(pair_rows) >= max_pairs:
                 break
             ROTATION_TARGET_TICKERS.add(to_stock["ticker"])
+            pair_index = len(pair_rows) + 1
+            ROTATION_PAIR_CONTEXT.append(
+                (from_stock["name"], from_stock["ticker"], to_stock["name"], to_stock["ticker"])
+            )
             target_is_held = "持仓加仓 / held add" if to_stock.get("position", 0) > 0 else "观察买入 / watchlist buy"
             pair_rows.append(
                 [
@@ -958,6 +1119,7 @@ def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote])
                     quote_metrics_inline(to_quote),
                     short_reasons(to_reasons),
                     red_flag_news_check(to_stock),
+                    influencer_rotation_check(from_stock, to_stock, pair_index),
                     "先人工复核；若基本面没破，只考虑小比例/分批",
                 ]
             )
@@ -991,6 +1153,7 @@ def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote])
                 "目标数据 / Target data",
                 "机会理由 / Opportunity",
                 "红旗自动核查 / Red-flag check",
+                "大V组合观点 / Influencer view",
                 "建议动作 / Action",
             ],
             pair_rows,
@@ -998,6 +1161,8 @@ def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote])
         "",
         "红旗核查口径：只对触发轮动的目标标的搜索；查询使用公司名 + ticker + 红旗关键词。结果是证据提示，不是自动定罪；未发现直接匹配不等于风险不存在。",
         "Red-flag check scope: only triggered rotation targets are searched, using company name + ticker + risk keywords. Results are evidence prompts, not automatic truth judgments.",
+        "大V核查口径：只搜索配置名单里的公开信息；未发现不等于他们没有观点，可能只是公开搜索源未覆盖。",
+        "Influencer check scope: searches public sources for configured names only; not found does not prove no private or platform-only view exists.",
         "",
         "口径解释：成交量是市场参与热度；价格下跌但放量，说明资金正在重新定价，需要确认是恐慌错杀还是基本面坏了。轮动只适合小比例、分批、人工复核。",
         "Plain English: volume shows market participation. A selloff with volume means real money is repricing the stock, so verify whether it is panic or fundamental damage before acting.",
@@ -1060,6 +1225,8 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
     DATA_QUALITY_LOG.clear()
     ROTATION_TARGET_TICKERS.clear()
     NEWS_CHECK_CACHE.clear()
+    INFLUENCER_CHECK_CACHE.clear()
+    ROTATION_PAIR_CONTEXT.clear()
     lines: List[str] = []
     triggered = False
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
@@ -1144,6 +1311,23 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
                 )
             )
 
+    influencer_rows: List[List[str]] = []
+    if config.get("influencer_watch", {}).get("enabled", False) and (
+        rotation_alerts or stock_rows or stock_errors or indicator_alerts
+    ):
+        try:
+            influencer_rows = influencer_latest_rows(config)
+        except Exception as exc:
+            influencer_rows = [
+                [
+                    "大V雷达 / Influencer radar",
+                    "数据获取失败 / fetch failed",
+                    "",
+                    str(exc),
+                    "本次忽略，不影响行情信号 / ignored this run",
+                ]
+            ]
+
     if rotation_alerts:
         lines.append("一、可能的调仓决策 / Potential Rotation Decisions")
         lines.append("----------------------------")
@@ -1170,6 +1354,19 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append("三、市场情绪背景 / Market Sentiment Context")
         lines.append("----------------------------")
         lines.append("\n\n".join(indicator_alerts))
+        lines.append("")
+
+    if influencer_rows:
+        lines.append("四、交易高手观点雷达 / Influencer Radar")
+        lines.append("----------------------------")
+        lines.append(
+            markdown_table(
+                ["人/类型 / Name", "成绩背景 / Background", "核心观点 / Core view", "最新公开动态 / Latest public items", "使用方式 / How to use"],
+                influencer_rows,
+            )
+        )
+        lines.append("说明：这里抓取的是公开新闻/RSS可见信息，很多交易者的实时观点可能在付费社区、X、YouTube 或直播中，不一定能被完整覆盖。")
+        lines.append("Note: this checks public news/RSS-visible items only; paid communities, X, YouTube, and livestreams may not be fully covered.")
         lines.append("")
 
     if not rotation_alerts and not stock_rows and not stock_errors and not indicator_alerts:

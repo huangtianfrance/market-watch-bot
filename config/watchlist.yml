@@ -25,6 +25,45 @@ news_search:
   request_pause_seconds: 3.0
   note: "Only checks red flags for triggered rotation targets. Results are evidence prompts, not automatic truth judgments."
 
+influencer_watch:
+  enabled: true
+  lookback: 7d
+  max_articles_per_influencer: 2
+  max_rotation_pairs_to_check: 3
+  request_pause_seconds: 3.0
+  note: "Tracks selected high-performance retail/trading figures. Public-search evidence only; not investment advice."
+  people:
+    - name: Mark Minervini
+      aliases: ["Mark Minervini"]
+      background: "从几千美元做到百万级；1997和2021美国投资冠军"
+      core_view: "只买最强股票；突破买入；错了立刻止损"
+      topic_terms: "stocks OR trading OR market OR ORCL OR Oracle"
+    - name: David Ryan
+      aliases: ["David Ryan trader", "David Ryan CANSLIM"]
+      background: "1985-1987连续三年美国投资冠军"
+      core_view: "CANSLIM：盈利增长 + 行业龙头 + 技术突破"
+      topic_terms: "stocks OR CANSLIM OR growth stocks OR market"
+    - name: Oliver Kell
+      aliases: ["Oliver Kell", "Oliver Kell trader"]
+      background: "2020美国投资冠军，约+941%"
+      core_view: "先判断价格阶段；先设止损；再谈盈利"
+      topic_terms: "stocks OR trading OR price action OR market"
+    - name: J Law / Judy Lai
+      aliases: ["J Law stock", "Judy Lai trader", "J Law Judy Lai"]
+      background: "2024美国投资冠军；小资金和大资金组均有数倍收益"
+      core_view: "Minervini体系；强势股；集中；纪律"
+      topic_terms: "stocks OR trading OR Minervini OR market"
+    - name: Keith Gill / Roaring Kitty
+      aliases: ["Keith Gill", "Roaring Kitty", "DeepFuckingValue"]
+      background: "GameStop成名；散户逆向集中下注代表"
+      core_view: "深度研究 + 逆向集中下注；但波动和回撤极高"
+      topic_terms: "stocks OR GameStop OR market OR trading"
+    - name: Tim Sykes / Ross Cameron
+      aliases: ["Tim Sykes", "Ross Cameron", "Warrior Trading"]
+      background: "小账户短线交易成名"
+      core_view: "小盘股波动；日内交易；严格风控"
+      topic_terms: "day trading OR small cap stocks OR trading OR market"
+
 global_rules:
   stock_big_up_daily_pct: 5.0
   stock_big_up_5d_pct: 10.0
