@@ -373,6 +373,15 @@ def quote_metrics_inline(quote: Quote) -> str:
     return f"{quote.last:.2f}; 今日 {pct_line(quote.daily_pct)}; 5日 {pct_line(quote.five_day_pct)}; 量 {ratio_text}"
 
 
+def plain_text(text: str) -> str:
+    return str(text).replace("<br>", "\n").replace("|", "/")
+
+
+def indent_text(text: str, spaces: int = 6) -> str:
+    prefix = " " * spaces
+    return "\n".join(prefix + line if line else line for line in plain_text(text).splitlines())
+
+
 def table_cell(text: str) -> str:
     return text.replace("\n", "<br>").replace("|", "/")
 
@@ -388,7 +397,7 @@ def markdown_table(headers: List[str], rows: List[List[str]]) -> str:
 
 
 def short_reasons(reasons: List[str]) -> str:
-    return "<br>".join(reasons)
+    return "\n".join(f"- {reason}" for reason in reasons)
 
 
 def first_guardrails(stock: Dict[str, Any], limit: int = 3) -> str:
@@ -555,34 +564,39 @@ def red_flag_news_check(stock: Dict[str, Any]) -> str:
         NEWS_CHECK_CACHE[cache_key] = result
         return result
 
-    rows: List[str] = []
+    evidence_rows: List[str] = []
+    missed_flags: List[str] = []
     for index, flag in enumerate(shown_flags, start=1):
         matched_articles = [article for article in articles if article_matches_flag(article, flag)]
         evidence_articles = matched_articles[:2]
         if not articles:
-            rows.append(
-                f"{index}) {trim_text(flag, 70)}：未发现公开新闻证据 / no public-news evidence found"
-            )
+            missed_flags.append(trim_text(flag, 42))
             continue
         if not evidence_articles:
-            rows.append(
-                f"{index}) {trim_text(flag, 70)}：未发现直接匹配证据 / no direct evidence in broad news scan"
-            )
+            missed_flags.append(trim_text(flag, 42))
             continue
 
         evidence = []
         for article in evidence_articles:
             evidence.append(article_evidence_text(article))
-        rows.append(
-            f"{index}) {trim_text(flag, 70)}：疑似线索，需人工复核 / possible signal, review manually<br>"
-            f"证据 / Evidence: " + "<br>".join(evidence)
+        evidence_rows.append(
+            f"- 疑似红旗：{trim_text(flag, 48)}\n"
+            f"  证据：{'; '.join(evidence)}"
         )
 
     extra_count = len(red_flags) - max_flags
+    rows: List[str] = []
+    if evidence_rows:
+        rows.append("发现疑似线索，需人工复核：")
+        rows.extend(evidence_rows)
+    else:
+        rows.append(f"未发现直接匹配红旗新闻（已查前 {len(shown_flags)} 项）。")
+    if missed_flags:
+        rows.append("仍需人工确认：" + "；".join(missed_flags[:3]))
     if extra_count > 0:
-        rows.append(f"另有 {extra_count} 条红旗未自动搜索；交易前人工展开 / {extra_count} more red flags not auto-searched.")
+        rows.append(f"另有 {extra_count} 条红旗未自动搜索，交易前再展开。")
 
-    result = "<br>".join(rows)
+    result = "\n".join(rows)
     NEWS_CHECK_CACHE[cache_key] = result
     return result
 
@@ -598,7 +612,7 @@ def query_from_aliases(aliases: List[str], extra_terms: str = "") -> str:
 def article_titles_summary(articles: List[Dict[str, Any]], max_items: int) -> str:
     if not articles:
         return "未发现最新公开动态 / no recent public item found"
-    return "<br>".join(article_evidence_text(article) for article in articles[:max_items])
+    return "\n".join(f"- {article_evidence_text(article)}" for article in articles[:max_items])
 
 
 def stance_from_articles(articles: List[Dict[str, Any]]) -> str:
@@ -719,9 +733,45 @@ def influencer_rotation_check(from_stock: Dict[str, Any], to_stock: Dict[str, An
     if not articles:
         result = "未发现这些大V公开讨论该组合 / no tracked influencer comment found"
     else:
-        result = f"{stance_from_articles(articles)}<br>{article_titles_summary(articles, max_articles)}"
+        result = f"{stance_from_articles(articles)}\n{article_titles_summary(articles, max_articles)}"
     INFLUENCER_CHECK_CACHE[cache_key] = result
     return result
+
+
+def stock_signal_blocks(rows: List[List[str]]) -> str:
+    blocks = []
+    for index, row in enumerate(rows, start=1):
+        name, signal, data, read, decision = row
+        blocks.append(
+            "\n".join(
+                [
+                    f"{index}. {name}",
+                    f"   信号：{signal}",
+                    f"   数据：{data}",
+                    f"   解读：{read}",
+                    f"   动作：{decision}",
+                ]
+            )
+        )
+    return "\n\n".join(blocks)
+
+
+def influencer_blocks(rows: List[List[str]]) -> str:
+    blocks = []
+    for row in rows:
+        name, background, core_view, latest, usage = row
+        blocks.append(
+            "\n".join(
+                [
+                    f"- {name}",
+                    f"  背景：{background}",
+                    f"  方法：{core_view}",
+                    f"  最新：\n{indent_text(latest, 4)}",
+                    f"  用法：{usage}",
+                ]
+            )
+        )
+    return "\n\n".join(blocks)
 
 
 def explain_low_signal() -> str:
@@ -1097,75 +1147,60 @@ def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote])
         if buy_reasons:
             buy_candidates.append((stock, quote, buy_reasons))
 
-    pair_rows: List[List[str]] = []
+    pair_blocks: List[str] = []
     max_pairs = int(engine.get("max_pairs_per_email", 5))
     for from_stock, from_quote, from_reasons in sell_candidates:
         for to_stock, to_quote, to_reasons in buy_candidates:
             if from_stock["ticker"] == to_stock["ticker"]:
                 continue
-            if len(pair_rows) >= max_pairs:
+            if len(pair_blocks) >= max_pairs:
                 break
             ROTATION_TARGET_TICKERS.add(to_stock["ticker"])
-            pair_index = len(pair_rows) + 1
+            pair_index = len(pair_blocks) + 1
             ROTATION_PAIR_CONTEXT.append(
                 (from_stock["name"], from_stock["ticker"], to_stock["name"], to_stock["ticker"])
             )
             target_is_held = "持仓加仓 / held add" if to_stock.get("position", 0) > 0 else "观察买入 / watchlist buy"
-            pair_rows.append(
-                [
-                    f"{from_stock['name']} ({from_stock['ticker']})",
-                    f"{to_stock['name']} ({to_stock['ticker']})",
-                    target_is_held,
-                    quote_metrics_inline(to_quote),
-                    short_reasons(to_reasons),
-                    red_flag_news_check(to_stock),
-                    influencer_rotation_check(from_stock, to_stock, pair_index),
-                    "先人工复核；若基本面没破，只考虑小比例/分批",
-                ]
+            pair_blocks.append(
+                "\n".join(
+                    [
+                        f"{pair_index}. {from_stock['name']} -> {to_stock['name']} ({target_is_held})",
+                        f"   目标数据：{quote_metrics_inline(to_quote)}",
+                        "   机会理由：",
+                        indent_text(short_reasons(to_reasons)),
+                        "   红旗核查：",
+                        indent_text(red_flag_news_check(to_stock)),
+                        "   大V观点：",
+                        indent_text(influencer_rotation_check(from_stock, to_stock, pair_index)),
+                        "   建议动作：先人工复核；若基本面没破，只考虑小比例/分批。",
+                    ]
+                )
             )
-        if len(pair_rows) >= max_pairs:
+        if len(pair_blocks) >= max_pairs:
             break
 
-    if not pair_rows:
+    if not pair_blocks:
         return []
 
-    funding_rows = [
-        [
-            f"{stock['name']} ({stock['ticker']})",
-            quote_metrics_inline(quote),
-            short_reasons(reasons),
-        ]
+    funding_blocks = [
+        f"- {stock['name']} ({stock['ticker']}): {quote_metrics_inline(quote)}\n"
+        f"  理由：{plain_text('; '.join(reasons))}"
         for stock, quote, reasons in sell_candidates
     ]
     lines = [
-        f"结论：出现 {len(pair_rows)} 个轮动候选。核心不是同时买入多只股票，而是：有持仓走强，可考虑把少量资金转向低位机会。",
-        f"Conclusion: {len(pair_rows)} rotation candidates were triggered. This is a research list, not a trade order.",
+        f"结论：出现 {len(pair_blocks)} 个轮动候选。它们是研究清单，不是同时买入指令。",
+        f"Conclusion: {len(pair_blocks)} rotation candidates were triggered. This is a research list, not a trade order.",
         "",
-        "资金来源候选 / Possible Funding Source",
-        markdown_table(["标的 / Name", "数据 / Data", "为什么可卖一点 / Trim reason"], funding_rows),
+        "资金来源候选 / Possible funding source:",
+        "\n".join(funding_blocks),
         "",
-        "候选轮动表 / Rotation Candidate Table",
-        markdown_table(
-            [
-                "从 / From",
-                "到 / To",
-                "类型 / Type",
-                "目标数据 / Target data",
-                "机会理由 / Opportunity",
-                "红旗自动核查 / Red-flag check",
-                "大V组合观点 / Influencer view",
-                "建议动作 / Action",
-            ],
-            pair_rows,
-        ),
+        "候选轮动 / Rotation candidates:",
+        "\n\n".join(pair_blocks),
         "",
         "红旗核查口径：只对触发轮动的目标标的搜索；查询使用公司名 + ticker + 红旗关键词。结果是证据提示，不是自动定罪；未发现直接匹配不等于风险不存在。",
-        "Red-flag check scope: only triggered rotation targets are searched, using company name + ticker + risk keywords. Results are evidence prompts, not automatic truth judgments.",
         "大V核查口径：只搜索配置名单里的公开信息；未发现不等于他们没有观点，可能只是公开搜索源未覆盖。",
-        "Influencer check scope: searches public sources for configured names only; not found does not prove no private or platform-only view exists.",
         "",
-        "口径解释：成交量是市场参与热度；价格下跌但放量，说明资金正在重新定价，需要确认是恐慌错杀还是基本面坏了。轮动只适合小比例、分批、人工复核。",
-        "Plain English: volume shows market participation. A selloff with volume means real money is repricing the stock, so verify whether it is panic or fundamental damage before acting.",
+        "口径解释：成交量是市场参与热度；下跌放量说明资金正在重新定价，要先确认是恐慌错杀还是基本面坏了。",
     ]
     return ["\n".join(lines)]
 
@@ -1338,12 +1373,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append("二、个股机会或风险提示 / Stock-Level Signals")
         lines.append("--------------------------------")
         if stock_rows:
-            lines.append(
-                markdown_table(
-                    ["标的 / Name", "信号 / Signal", "数据 / Data", "解读 / Read", "可做决策 / Possible decision"],
-                    stock_rows,
-                )
-            )
+            lines.append(stock_signal_blocks(stock_rows))
         if stock_errors:
             lines.append("")
             lines.append("数据异常 / Data exceptions")
@@ -1357,16 +1387,11 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append("")
 
     if influencer_rows:
-        lines.append("四、交易高手观点雷达 / Influencer Radar")
+        influencer_section = "四" if indicator_alerts else "三"
+        lines.append(f"{influencer_section}、交易高手观点雷达 / Influencer Radar")
         lines.append("----------------------------")
-        lines.append(
-            markdown_table(
-                ["人/类型 / Name", "成绩背景 / Background", "核心观点 / Core view", "最新公开动态 / Latest public items", "使用方式 / How to use"],
-                influencer_rows,
-            )
-        )
+        lines.append(influencer_blocks(influencer_rows))
         lines.append("说明：这里抓取的是公开新闻/RSS可见信息，很多交易者的实时观点可能在付费社区、X、YouTube 或直播中，不一定能被完整覆盖。")
-        lines.append("Note: this checks public news/RSS-visible items only; paid communities, X, YouTube, and livestreams may not be fully covered.")
         lines.append("")
 
     if not rotation_alerts and not stock_rows and not stock_errors and not indicator_alerts:
