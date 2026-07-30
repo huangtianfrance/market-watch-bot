@@ -64,6 +64,15 @@ influencer_watch:
       core_view: "小盘股波动；日内交易；严格风控"
       topic_terms: "day trading OR small cap stocks OR trading OR market"
 
+trading_framework:
+  enabled: true
+  title: "Small-account doubling framework"
+  core_principle: "小资金想翻倍，不能只靠低位抄底；要在市场恐慌时买入基本面没死、并且未来可能被重新定价的资产，然后用纪律避免把一次判断错误变成永久亏损。"
+  trend_leader_lens: "Minervini / David Ryan: judge the main theme, relative strength, leadership, volume confirmation, and whether the stock is being accumulated by real money."
+  contrarian_lens: "Keith Gill: allow contrarian concentration only after deep research, clear mispricing, and a credible re-rating path; do not let one thesis dominate the whole account."
+  risk_lens: "Oliver Kell: define invalidation and stop discipline before discussing profit targets; if the thesis breaks, exit instead of averaging down emotionally."
+  sizing_note: "For high-volatility ideas, prefer staged entries and small tranches. A signal is a research trigger, not an automatic trade order."
+
 global_rules:
   stock_big_up_daily_pct: 5.0
   stock_big_up_5d_pct: 10.0
@@ -93,7 +102,13 @@ stocks:
     cost_basis: 0
     currency: USD
     asset_type: crypto
-    notes: "Potential future allocation. Watch extreme fear, ETF adoption, miner economics, and macro liquidity."
+    notes: "Priority entry watch: potential future Bitcoin allocation. Watch deep pullback, extreme fear, ETF adoption, miner economics, and macro liquidity."
+    entry_alert:
+      enabled: true
+      daily_drop_pct: -8.0
+      five_day_drop_pct: -18.0
+      volume_ratio_min: 1.2
+      message: "Prepare BTC staged-entry research only if Crypto Fear & Greed is fearful/extreme fearful, ETF access remains healthy, and no systemic crypto liquidity red flag appears."
     rotation:
       role: aggressive
       allow_as_target_when_not_held: true
@@ -239,10 +254,16 @@ stocks:
 
   - name: Airbus
     ticker: AIR.PA
-    position: 18
+    position: 12
     cost_basis: 191.54
     currency: EUR
-    notes: "Core holding. Consider trimming 2-3 shares on strength near 205-210."
+    notes: "Core swing-trading holding. Trim on strength; alert on sharp pullback if fundamentals remain intact."
+    entry_alert:
+      enabled: true
+      daily_drop_pct: -6.0
+      five_day_drop_pct: -12.0
+      volume_ratio_min: 1.3
+      message: "Prepare Airbus swing add/re-entry research if delivery, FCF, supply-chain, and order-book thesis remain intact."
     rotation:
       role: core
       sell_strength:
@@ -268,10 +289,25 @@ stocks:
 
   - name: Oracle
     ticker: ORCL
-    position: 14
-    cost_basis: 132.07
+    position: 27
+    cost_basis: 119.56
     currency: EUR
     notes: "High-risk AI infrastructure rebound holding. Watch debt, FCF, capex, Fed path."
+    entry_alert:
+      enabled: true
+      daily_drop_pct: -8.0
+      five_day_drop_pct: -16.0
+      volume_ratio_min: 1.5
+      message: "Prepare only a small staged Oracle add if RPO/OCI demand remains intact, credit rating stays investment grade, FCF/capex risk is not worsening, and major AI customer contracts remain credible."
+    daily_volume_watch:
+      enabled: true
+      focus: "Held high-conviction AI infrastructure rebound stock. Watch whether selling pressure is still tied to credit/capex fear, or whether buyers start defending the low zone."
+      panic_volume_ratio: 2.0
+      accumulation_volume_ratio: 1.5
+      quiet_volume_ratio: 0.8
+      support_zone: 105
+      reclaim_zone: 125
+      decision_note: "Do not add only because it is cheap. Add only if volume shows selling pressure fading or buyers returning, and no credit/FCF/customer-contract red flag appears."
     rotation:
       role: aggressive
       loss_protection:
@@ -364,6 +400,21 @@ stocks:
     cost_basis: 101.60
     currency: EUR
     notes: "High-volatility China e-commerce exposure."
+    entry_alert:
+      enabled: true
+      daily_drop_pct: -8.0
+      five_day_drop_pct: -16.0
+      volume_ratio_min: 1.5
+      message: "Prepare only a small staged PDD add if China e-commerce demand, Temu risk, margins, and regulation remain intact after the selloff."
+    daily_volume_watch:
+      enabled: true
+      focus: "Held China internet rebound candidate. Watch whether China/HK risk appetite is returning and whether price-volume action confirms accumulation instead of another failed bounce."
+      panic_volume_ratio: 2.0
+      accumulation_volume_ratio: 1.5
+      quiet_volume_ratio: 0.8
+      support_zone: 80
+      reclaim_zone: 102
+      decision_note: "Prefer holding through deep discount unless the China e-commerce thesis breaks. A reclaim near cost basis with volume would be a stronger recovery signal."
     rotation:
       role: aggressive
       loss_protection:
@@ -383,6 +434,31 @@ stocks:
           - "Margins collapse due to subsidies, tariffs, logistics or regulation"
           - "U.S./EU regulatory pressure on Temu materially worsens"
           - "China consumer data or platform competition weakens the thesis"
+
+  - name: JD
+    ticker: JD
+    position: 2
+    cost_basis: 0
+    currency: EUR
+    notes: "Tencent spin-off / distributed shares. Treat dividends and proceeds as Tencent-derived return, not fresh cash deployment."
+    rotation:
+      role: aggressive
+      loss_protection:
+        avoid_as_funding_source_below_recovery: true
+        recovery_price: 45
+        note: "Small Tencent-derived position; avoid selling only because it is down unless JD's core thesis is broken."
+      sell_strength:
+        min_daily_pct: 6.0
+        min_5d_pct: 14.0
+      buy_opportunity:
+        near_low_years: 1
+        near_low_tolerance_pct: 6.0
+        max_5d_pct: -10.0
+      fundamental_guardrail:
+        red_flags:
+          - "China consumption or e-commerce demand weakens beyond current expectations"
+          - "JD Retail margin or revenue growth deteriorates materially"
+          - "Logistics, subsidy competition, or capital allocation pressure worsens"
 
   - name: Veolia
     ticker: VIE.PA
@@ -412,7 +488,13 @@ stocks:
     ticker: ADP.PA
     position: 0
     currency: EUR
-    notes: "Watchlist: airport operator, travel infrastructure."
+    notes: "Priority swing-trading watch: airport operator / travel infrastructure. Alert on sharp pullback if fundamentals remain intact."
+    entry_alert:
+      enabled: true
+      daily_drop_pct: -6.0
+      five_day_drop_pct: -12.0
+      volume_ratio_min: 1.3
+      message: "Prepare Groupe ADP swing-entry research if passenger traffic, regulation, concession economics, and balance-sheet thesis remain intact."
     rotation:
       role: watchlist
       allow_as_target_when_not_held: true
@@ -688,19 +770,67 @@ stocks:
     ticker: AVGO
     position: 0
     currency: USD
-    notes: "Watchlist: AI networking/custom silicon + software."
+    notes: "Priority entry watch: AI networking/custom silicon + software. Alert on sharp selloff if fundamentals remain intact."
+    entry_alert:
+      enabled: true
+      daily_drop_pct: -8.0
+      five_day_drop_pct: -16.0
+      volume_ratio_min: 1.5
+      message: "Prepare staged-entry research if AI ASIC/networking demand and free cash flow remain intact."
     rotation:
       role: watchlist
       allow_as_target_when_not_held: true
       buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 8.0, max_5d_pct: -10.0}
       fundamental_guardrail:
-        red_flags: ["AI networking/custom silicon demand or software integration deteriorates materially"]
+        red_flags:
+          - "AI networking/custom silicon demand or hyperscaler ASIC orders deteriorate materially"
+          - "Free cash flow margin or operating leverage weakens materially"
+          - "VMware/software integration or debt reduction plan deteriorates"
+          - "Major customer concentration risk becomes visible through order cuts"
+
+  - name: Palantir
+    ticker: PLTR
+    position: 0
+    currency: USD
+    notes: "Priority entry watch: AI software/government-commercial platform. Alert on sharp selloff only if growth thesis remains intact."
+    entry_alert:
+      enabled: true
+      daily_drop_pct: -10.0
+      five_day_drop_pct: -18.0
+      volume_ratio_min: 1.6
+      message: "Prepare staged-entry research only if AIP demand, government contracts, commercial growth, and margins remain intact."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      buy_opportunity: {near_low_years: 1, near_low_tolerance_pct: 10.0, max_5d_pct: -12.0}
+      fundamental_guardrail:
+        red_flags:
+          - "U.S. commercial or government revenue growth decelerates materially"
+          - "AIP adoption or net retention weakens materially"
+          - "Margins or free cash flow deteriorate despite high valuation"
+          - "Major government contract loss or budget risk appears"
+          - "Insider selling or stock-based compensation materially pressures shareholder returns"
 
   - name: Vertiv
     ticker: VRT
     position: 0
     currency: USD
-    notes: "Watchlist: data center power/cooling; very AI-capex sensitive."
+    notes: "Priority watch: data center power/cooling; very AI-capex sensitive. Send daily price-volume signal."
+    entry_alert:
+      enabled: true
+      daily_drop_pct: -10.0
+      five_day_drop_pct: -20.0
+      volume_ratio_min: 1.6
+      message: "Prepare VRT staged-entry research only if data center demand, margins, cash flow, and AI capex thesis remain intact after the selloff."
+    daily_volume_watch:
+      enabled: true
+      focus: "Post-earnings selloff follow-up. Watch whether heavy selling fades, whether price holds support, and whether buyers return with volume."
+      panic_volume_ratio: 2.0
+      accumulation_volume_ratio: 1.5
+      quiet_volume_ratio: 0.8
+      support_zone: 270
+      reclaim_zone: 290
+      decision_note: "Potential 12-month high-upside candidate only after sell pressure fades or price reclaims the post-earnings breakdown zone."
     rotation:
       role: watchlist
       allow_as_target_when_not_held: true
@@ -798,9 +928,15 @@ stocks:
   - name: Tencent
     ticker: 0700.HK
     position: 1
-    cost_basis: 48.12
+    cost_basis: 35.03
     currency: EUR
-    notes: "Residual observation position after successful prior trade."
+    notes: "Residual observation position after successful prior trade. Alert on deep pullback if China platform thesis and buyback support remain intact."
+    entry_alert:
+      enabled: true
+      daily_drop_pct: -6.0
+      five_day_drop_pct: -12.0
+      volume_ratio_min: 1.3
+      message: "Prepare Tencent staged-entry research if gaming, ads, fintech/cloud, buyback support, and China regulation remain intact."
     rotation:
       role: core
       sell_strength:
@@ -874,10 +1010,10 @@ market_indicators:
     type: crypto_fear_greed
     ticker: CRYPTO_FNG
     rules:
-      extreme_fear_below: 15
+      extreme_fear_below: 24
       fear_watch_below: 25
       extreme_greed_above: 80
-    notes: "Extreme fear may fit BTC accumulation watch. Extreme greed may fit patience or trimming discipline."
+    notes: "Hard notification signal. Extreme fear may fit BTC accumulation watch. Extreme greed may fit patience or trimming discipline."
 
   - name: BlackRock Bitcoin ETF
     ticker: IBIT

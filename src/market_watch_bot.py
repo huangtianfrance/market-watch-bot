@@ -373,6 +373,96 @@ def quote_metrics_inline(quote: Quote) -> str:
     return f"{quote.last:.2f}; 今日 {pct_line(quote.daily_pct)}; 5日 {pct_line(quote.five_day_pct)}; 量 {ratio_text}"
 
 
+def daily_volume_watch_readout(stock: Dict[str, Any], quote: Quote) -> Tuple[str, str]:
+    rules = stock.get("daily_volume_watch", {})
+    ratio = volume_ratio(quote)
+    ratio_text = "n/a" if ratio is None else f"{ratio:.1f}x"
+    support = rules.get("support_zone")
+    reclaim = rules.get("reclaim_zone")
+    panic_ratio = rules.get("panic_volume_ratio", 2.0)
+    accumulation_ratio = rules.get("accumulation_volume_ratio", 1.5)
+    quiet_ratio = rules.get("quiet_volume_ratio", 0.8)
+
+    if ratio is None:
+        read = "成交量数据不足，今天只能看价格，不能判断资金是否真正进出。"
+        decision = "不做动作；等下一次有可靠成交量数据。"
+    elif quote.daily_pct < -3 and ratio >= panic_ratio:
+        read = f"放量大跌：成交量约 {ratio_text}，价格下跌 {quote.daily_pct:+.2f}%。这通常说明机构或短线资金还在主动卖。"
+        decision = "不要接第一刀；等后续缩量止跌或放量反弹确认。"
+    elif quote.daily_pct < 0 and ratio <= quiet_ratio:
+        read = f"缩量下跌：成交量约 {ratio_text}，卖压比前期弱。简单说，跌还在跌，但卖的人可能少了。"
+        decision = "进入观察，不急买；如果后续不再创新低，才考虑小仓研究。"
+    elif quote.daily_pct > 2 and ratio >= accumulation_ratio:
+        read = f"放量反弹：成交量约 {ratio_text}，价格上涨 {quote.daily_pct:+.2f}%。这比普通反弹更重要，可能有资金回补。"
+        decision = "可准备小仓试探，但仍要确认不是一天反抽；优先看能否站稳关键价位。"
+    elif quote.daily_pct > 0:
+        read = f"温和反弹：成交量约 {ratio_text}。价格有修复，但资金确认力度还不够强。"
+        decision = "继续观察；不追高，等放量或站稳关键区间。"
+    else:
+        read = f"震荡/弱势整理：成交量约 {ratio_text}，今天没有明确资金重新进场信号。"
+        decision = "保持雷达状态；等待卖压衰竭或资金确认。"
+
+    if support is not None and quote.last <= support:
+        decision += f"\n关键提醒：价格已到/跌破观察支撑 {support}，需要确认是否能收回，否则技术面继续受伤。"
+    elif reclaim is not None and quote.last >= reclaim:
+        decision += f"\n关键提醒：价格已到/收复观察区 {reclaim}，如果配合成交量放大，说明财报后杀估值可能开始修复。"
+
+    focus = rules.get("focus")
+    if focus:
+        read += f"\n观察重点：{focus}"
+    note = rules.get("decision_note")
+    if note:
+        decision += f"\nCEO口径：{note}"
+
+    decision += "\n" + framework_readout(stock, quote, ["daily volume watch"])
+    return read, decision
+
+
+def entry_alert_row(stock: Dict[str, Any], quote: Quote) -> Optional[List[str]]:
+    rules = stock.get("entry_alert", {})
+    if not rules.get("enabled", False):
+        return None
+
+    ratio = volume_ratio(quote)
+    ratio_min = rules.get("volume_ratio_min")
+    volume_ok = ratio_min is None or (ratio is not None and ratio >= ratio_min)
+    daily_drop = rules.get("daily_drop_pct")
+    five_day_drop = rules.get("five_day_drop_pct")
+    daily_ok = daily_drop is not None and quote.daily_pct <= daily_drop
+    five_day_ok = five_day_drop is not None and quote.five_day_pct is not None and quote.five_day_pct <= five_day_drop
+
+    if not ((daily_ok or five_day_ok) and volume_ok):
+        return None
+
+    ratio_text = "n/a" if ratio is None else f"{ratio:.1f}x"
+    trigger_bits = []
+    if daily_ok:
+        trigger_bits.append(f"单日 {quote.daily_pct:+.2f}% <= {daily_drop:+.2f}%")
+    if five_day_ok:
+        trigger_bits.append(f"5日 {quote.five_day_pct:+.2f}% <= {five_day_drop:+.2f}%")
+    trigger_text = "; ".join(trigger_bits)
+    guardrails = guardrail_text(stock)
+
+    read = (
+        f"触发深回撤建仓雷达：{trigger_text}，成交量约 {ratio_text}。\n"
+        "这不是自动买入，而是说明市场正在用真实成交量重新定价这只高质量/高弹性标的。\n"
+        "前提条件：基本面没有坏。必须先排除下面红旗：\n"
+        f"{guardrails}"
+    )
+    decision = (
+        f"{rules.get('message', 'Prepare staged-entry research if the thesis remains intact.')}\n"
+        "建议动作：先做基本面红旗核查；如果红旗没有出现，等待止跌或放量反弹，再考虑小仓分批。\n"
+        + framework_readout(stock, quote, ["entry alert", "sharp selloff"])
+    )
+    return [
+        f"{stock['name']} ({stock['ticker']})",
+        "深回撤建仓雷达 / deep pullback entry watch",
+        quote_metrics_inline(quote),
+        read,
+        decision,
+    ]
+
+
 def plain_text(text: str) -> str:
     return str(text).replace("<br>", "\n").replace("|", "/")
 
@@ -795,6 +885,80 @@ def explain_rotation_signal() -> str:
     )
 
 
+def framework_summary(config: Dict[str, Any]) -> str:
+    framework = config.get("trading_framework", {})
+    if not framework.get("enabled", False):
+        return ""
+    return "\n".join(
+        [
+            "本次使用的交易框架 / Decision Framework",
+            "- 主线强势：用 Minervini / David Ryan 的方法看行业主线、相对强度、成交量确认和龙头地位。",
+            "- 逆向下注：用 Keith Gill 的精神做深度研究，只在基本面没死、市场可能重新定价时允许集中，但不能让单一故事失控。",
+            "- 风险纪律：用 Oliver Kell 的纪律先定义失效条件和退出规则，再谈盈利目标。",
+            f"- 核心原则：{framework.get('core_principle', '')}",
+        ]
+    )
+
+
+def theme_label(stock: Dict[str, Any]) -> str:
+    ticker = stock.get("ticker", "")
+    name = stock.get("name", "")
+    text = f"{name} {ticker}".lower()
+    if any(term in text for term in ["oracle", "microsoft", "nvidia", "broadcom", "asml", "tsmc", "vertiv", "semiconductor", "ai"]):
+        return "AI / cloud infrastructure"
+    if any(term in text for term in ["pdd", "meituan", "tencent", "jd", "alibaba", "china", "hong kong"]):
+        return "China internet / consumption recovery"
+    if any(term in text for term in ["airbus", "leonardo", "thales", "bae", "lockheed", "rheinmetall", "safran"]):
+        return "Aerospace / defense / industrial"
+    if any(term in text for term in ["bitcoin", "btc", "ibit", "crypto"]):
+        return "Crypto liquidity cycle"
+    if any(term in text for term in ["totalenergies", "exxon", "siemens", "schneider", "eaton", "ge"]):
+        return "Energy / electrification"
+    return "General watchlist"
+
+
+def framework_readout(stock: Dict[str, Any], quote: Quote, reasons: Optional[List[str]] = None) -> str:
+    reasons = reasons or []
+    ratio = volume_ratio(quote)
+    has_volume_confirmation = ratio is not None and ratio >= 1.5 and quote.daily_pct > 0
+    has_price_strength = quote.daily_pct > 0 and quote.five_day_pct is not None and quote.five_day_pct > 0
+    has_contrarian_setup = any(
+        key in reason
+        for reason in reasons
+        for key in ["低位", "low", "大跌", "selloff", "低吸", "buy zone"]
+    )
+    role = stock.get("rotation", {}).get("role", "watchlist")
+    held = stock.get("position", 0) > 0
+
+    if has_volume_confirmation or has_price_strength:
+        trend_line = "主线/强势股镜头：有价格确认；如果它也是当前市场主线里的龙头，可提高优先级。"
+    else:
+        trend_line = "主线/强势股镜头：暂时缺少价格确认；按 Minervini / Ryan 逻辑，不因为便宜就自动买。"
+
+    if has_contrarian_setup:
+        contrarian_line = "逆向重估镜头：价格进入被嫌弃区域；只有红旗核查干净、基本面没死，才符合 Keith Gill 式研究下注。"
+    else:
+        contrarian_line = "逆向重估镜头：不是明显低位错杀信号；更像观察主线强弱，而不是左侧抄底。"
+
+    if held and role in {"aggressive", "speculative"}:
+        sizing_line = "仓位纪律：这是高波动持仓，新增只能小比例分批，不能让单一故事决定整个账户。"
+    elif held:
+        sizing_line = "仓位纪律：已有持仓，优先考虑轮动后的组合比例，而不是单票情绪。"
+    else:
+        sizing_line = "仓位纪律：未持有标的只作为候选池；首次试仓应小，不用一次买满。"
+
+    stop_line = "退出纪律：先写清楚失效条件；如果财报、订单、现金流、监管或信用逻辑被证伪，按 Oliver Kell 纪律退出，不用希望扛单。"
+    return "\n".join(
+        [
+            f"主题归类：{theme_label(stock)}",
+            f"- {trend_line}",
+            f"- {contrarian_line}",
+            f"- {sizing_line}",
+            f"- {stop_line}",
+        ]
+    )
+
+
 def history_window_min(quote: Quote, years: int) -> Optional[float]:
     trading_days = 252 * years
     close = quote.close_history.dropna()
@@ -887,6 +1051,22 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
     name = stock["name"]
     is_held = stock.get("position", 0) > 0
 
+    if stock.get("daily_volume_watch", {}).get("enabled", False):
+        read, decision = daily_volume_watch_readout(stock, quote)
+        rows.append(
+            [
+                f"{name} ({stock['ticker']})",
+                "每日量价观察 / daily price-volume watch",
+                quote_metrics_inline(quote),
+                read,
+                decision,
+            ]
+        )
+
+    entry_row = entry_alert_row(stock, quote)
+    if entry_row:
+        rows.append(entry_row)
+
     if is_held and quote.daily_pct >= global_rules["stock_big_up_daily_pct"]:
         rows.append(
             [
@@ -894,7 +1074,8 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
                 "持仓大涨 / held strength",
                 quote_metrics_inline(quote),
                 f"单日上涨 {quote.daily_pct:+.2f}%，符合你的强势日检查纪律",
-                "不追高；检查是否减一点、锁利润，或换入更低位标的",
+                "不追高；检查是否减一点、锁利润，或换入更低位标的\n"
+                + framework_readout(stock, quote, ["strong daily move"]),
             ]
         )
 
@@ -905,7 +1086,8 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
                 "持仓连续走强 / 5d strength",
                 quote_metrics_inline(quote),
                 f"5个交易日上涨 {quote.five_day_pct:+.2f}%，不是单日随机波动",
-                "评估是否把一小部分利润轮动出去",
+                "评估是否把一小部分利润轮动出去\n"
+                + framework_readout(stock, quote, ["strong 5-day move"]),
             ]
         )
 
@@ -920,7 +1102,8 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
                 "市场确认重估 / re-rating",
                 quote_metrics_inline(quote),
                 f"价格强势且成交量约 {ratio:.1f}x，说明有真实资金参与",
-                "提高研究优先级；确认财报、订单、指引或监管变化是否支撑",
+                "提高研究优先级；确认财报、订单、指引或监管变化是否支撑\n"
+                + framework_readout(stock, quote, ["market-confirmed re-rating"]),
             ]
         )
 
@@ -934,7 +1117,8 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
                     f"接近{years}年低位 / near {years}Y low",
                     quote_metrics_inline(quote),
                     f"当前 {quote.last:.2f}，{years}年低点约 {low:.2f}",
-                    "进入投研优先区；先判断是错杀还是价值陷阱，再考虑分批",
+                    "进入投研优先区；先判断是错杀还是价值陷阱，再考虑分批\n"
+                    + framework_readout(stock, quote, [f"near {years}Y low"]),
                 ]
             )
 
@@ -985,25 +1169,29 @@ def check_sentiment_index_rules(indicator: Dict[str, Any], sentiment: SentimentI
     alerts: List[str] = []
     rules = indicator.get("rules", {})
     name = indicator["name"]
+    extreme_fear_triggered = False
 
     extreme_fear = rules.get("extreme_fear_below")
     if extreme_fear is not None and sentiment.value <= extreme_fear:
+        extreme_fear_triggered = True
         alerts.append(
             bilingual(
                 (
                     f"{name} 进入极度恐慌区：当前 {sentiment.value} ({sentiment.classification})，触发线 <= {extreme_fear}。\n"
+                    f"这是你的硬触发通知：市场情绪已经进入可以认真研究低位买入的区域。\n"
                     f"简单说：加密市场情绪很差，很多人在逃离风险。\n"
                     f"CEO 决策点：如果 BTC ETF 没有持续流出、监管和网络安全没有新雷，可以开始认真研究小仓分批。"
                 ),
                 (
                     f"{name} entered extreme-fear territory: current {sentiment.value} ({sentiment.classification}), threshold <= {extreme_fear}.\n"
+                    f"This is your hard notification trigger: sentiment is weak enough to seriously review staged low-entry opportunities.\n"
                     f"In plain English, crypto sentiment is very weak. If ETF flows, regulation, and network security remain acceptable, this can be a staged-entry research signal."
                 ),
             )
         )
 
     fear_watch = rules.get("fear_watch_below")
-    if fear_watch is not None and sentiment.value <= fear_watch:
+    if fear_watch is not None and sentiment.value <= fear_watch and not extreme_fear_triggered:
         alerts.append(
             bilingual(
                 (
@@ -1168,6 +1356,8 @@ def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote])
                         f"   目标数据：{quote_metrics_inline(to_quote)}",
                         "   机会理由：",
                         indent_text(short_reasons(to_reasons)),
+                        "   交易框架：",
+                        indent_text(framework_readout(to_stock, to_quote, to_reasons)),
                         "   红旗核查：",
                         indent_text(red_flag_news_check(to_stock)),
                         "   大V观点：",
@@ -1308,7 +1498,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
     for stock in [item for item in config.get("stocks", []) if not item.get("disabled")]:
         try:
             quote = get_quote(stock["ticker"], quote_cache)
-            if stock["ticker"] in ROTATION_TARGET_TICKERS:
+            if stock["ticker"] in ROTATION_TARGET_TICKERS and not stock.get("daily_volume_watch", {}).get("enabled", False):
                 continue
             rows = stock_signal_rows(stock, quote, global_rules)
             triggered = triggered or bool(rows)
@@ -1362,6 +1552,12 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
                     "本次忽略，不影响行情信号 / ignored this run",
                 ]
             ]
+
+    if rotation_alerts or stock_rows or stock_errors or indicator_alerts:
+        summary = framework_summary(config)
+        if summary:
+            lines.append(summary)
+            lines.append("")
 
     if rotation_alerts:
         lines.append("一、可能的调仓决策 / Potential Rotation Decisions")
