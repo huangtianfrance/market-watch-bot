@@ -308,6 +308,23 @@ stocks:
       support_zone: 105
       reclaim_zone: 125
       decision_note: "Do not add only because it is cheap. Add only if volume shows selling pressure fading or buyers returning, and no credit/FCF/customer-contract red flag appears."
+    overhang_watch:
+      enabled: true
+      current_battle_zone_low: 128
+      current_battle_zone_high: 138
+      near_resistance_low: 138
+      near_resistance_high: 145
+      heavy_overhang_low: 145
+      heavy_overhang_high: 160
+      deep_value_low: 110
+      deep_value_high: 118
+      support_low: 118
+      support_high: 128
+      current_battle_note: "Price is in the repair zone. Traders who bought the rebound are still active, but the stock has not yet cleared the nearest trapped-holder supply."
+      near_resistance_note: "Nearest trapped-holder wall. Many recent buyers may sell here to reduce losses or get out flat."
+      heavy_overhang_note: "Heavier medium-term trapped supply. This zone is more likely to act as a serious ceiling unless fundamentals improve again."
+      support_note: "Recent low-zone turnover band. If this zone holds, low buyers are still defending."
+      deep_value_note: "Best risk/reward area for your style if the thesis is still intact and there is no new credit or cash-flow break."
     rotation:
       role: aggressive
       loss_protection:

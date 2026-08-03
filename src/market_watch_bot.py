@@ -418,6 +418,78 @@ def daily_volume_watch_readout(stock: Dict[str, Any], quote: Quote) -> Tuple[str
     return read, decision
 
 
+def overhang_watch_readout(stock: Dict[str, Any], quote: Quote) -> Tuple[str, str]:
+    rules = stock.get("overhang_watch", {})
+    price = quote.last
+    auto_levels = auto_overhang_levels(quote) or {}
+    battle_low = rules.get("current_battle_zone_low", auto_levels.get("current_battle_zone_low"))
+    battle_high = rules.get("current_battle_zone_high", auto_levels.get("current_battle_zone_high"))
+    near_low = rules.get("near_resistance_low", auto_levels.get("near_resistance_low"))
+    near_high = rules.get("near_resistance_high", auto_levels.get("near_resistance_high"))
+    heavy_low = rules.get("heavy_overhang_low", auto_levels.get("heavy_overhang_low"))
+    heavy_high = rules.get("heavy_overhang_high", auto_levels.get("heavy_overhang_high"))
+    support_low = rules.get("support_low", auto_levels.get("support_low"))
+    support_high = rules.get("support_high", auto_levels.get("support_high"))
+    deep_low = rules.get("deep_value_low", auto_levels.get("deep_value_low"))
+    deep_high = rules.get("deep_value_high", auto_levels.get("deep_value_high"))
+    auto_note = ""
+    if auto_levels and not rules:
+        auto_note = " 这些区间基于过去1年价格结构自动估算，用来帮助你识别低位承接和上方套牢盘压力。"
+
+    if battle_low is not None and battle_high is not None and battle_low <= price < battle_high:
+        read = (
+            f"股价位于修复拉锯区 {battle_low:.0f}-{battle_high:.0f}。"
+            " 这通常说明低位反弹已经发生，但最近一批被套/想回本离场的筹码还没有完全消化。"
+        )
+        decision = rules.get(
+            "current_battle_note",
+            "Repair zone only. Respect the rebound, but do not chase while the nearest supply wall is still overhead.",
+        )
+    elif near_low is not None and near_high is not None and near_low <= price < near_high:
+        read = (
+            f"股价正在接近最近套牢盘压力区 {near_low:.0f}-{near_high:.0f}。"
+            " 如果没有明显放量和基本面催化，最容易出现回本卖压。"
+        )
+        decision = rules.get(
+            "near_resistance_note",
+            "Nearest trapped-holder wall. Watch for profit-taking or break-even selling rather than fresh chasing.",
+        )
+    elif heavy_low is not None and heavy_high is not None and heavy_low <= price <= heavy_high:
+        read = (
+            f"股价进入更重的中期套牢盘区 {heavy_low:.0f}-{heavy_high:.0f}。"
+            " 这类区域通常不是轻松突破的地方，除非订单、指引或信用担忧出现明显改善。"
+        )
+        decision = rules.get(
+            "heavy_overhang_note",
+            "Heavier trapped supply overhead. Treat this zone as a likely trim/review area unless the thesis improves materially.",
+        )
+    elif support_low is not None and support_high is not None and support_low <= price < support_high:
+        read = (
+            f"股价位于最近低位换手支撑区 {support_low:.0f}-{support_high:.0f}。"
+            " 简单说，这里更像低位承接区，而不是明显的套牢墙。"
+        )
+        decision = rules.get(
+            "support_note",
+            "Support band. If this area holds, low-zone buyers are still defending and the repair structure stays alive.",
+        )
+    elif deep_low is not None and deep_high is not None and deep_low <= price < deep_high:
+        read = (
+            f"股价回到深度价值区 {deep_low:.0f}-{deep_high:.0f}。"
+            " 这更符合你在恐慌里布局的风格，但必须先确认基本面没有继续恶化。"
+        )
+        decision = rules.get(
+            "deep_value_note",
+            "Best value area for your style if the thesis remains intact and there is no new balance-sheet or cash-flow damage.",
+        )
+    else:
+        read = "当前价格没有落在预设的主要套牢盘或价值区间，先结合量价和基本面一起看。"
+        decision = "把套牢盘结构当作辅助地图，不单独作为买卖理由。"
+
+    if auto_note:
+        read += auto_note
+    return read, decision
+
+
 def entry_alert_row(stock: Dict[str, Any], quote: Quote) -> Optional[List[str]]:
     rules = stock.get("entry_alert", {})
     if not rules.get("enabled", False):
@@ -451,8 +523,7 @@ def entry_alert_row(stock: Dict[str, Any], quote: Quote) -> Optional[List[str]]:
     )
     decision = (
         f"{rules.get('message', 'Prepare staged-entry research if the thesis remains intact.')}\n"
-        "建议动作：先做基本面红旗核查；如果红旗没有出现，等待止跌或放量反弹，再考虑小仓分批。\n"
-        + framework_readout(stock, quote, ["entry alert", "sharp selloff"])
+        "建议动作：先做基本面红旗核查；如果红旗没有出现，等待止跌或放量反弹，再考虑小仓分批。"
     )
     return [
         f"{stock['name']} ({stock['ticker']})",
@@ -829,17 +900,24 @@ def influencer_rotation_check(from_stock: Dict[str, Any], to_stock: Dict[str, An
 
 
 def stock_signal_blocks(rows: List[List[str]]) -> str:
+    grouped: Dict[str, List[List[str]]] = {}
+    for row in rows:
+        grouped.setdefault(row[0], []).append(row)
+
     blocks = []
-    for index, row in enumerate(rows, start=1):
-        name, signal, data, read, decision = row
+    for index, (name, stock_rows) in enumerate(grouped.items(), start=1):
+        data = stock_rows[0][2]
+        analyses = [f"- {plain_text(row[3])}" for row in stock_rows]
+        decisions = [f"- {plain_text(row[4])}" for row in stock_rows]
         blocks.append(
             "\n".join(
                 [
                     f"{index}. {name}",
-                    f"   信号：{signal}",
                     f"   数据：{data}",
-                    f"   解读：{read}",
-                    f"   动作：{decision}",
+                    "   分析：",
+                    indent_text("\n".join(analyses), 3),
+                    "   结论：",
+                    indent_text("\n".join(decisions), 3),
                 ]
             )
         )
@@ -970,6 +1048,38 @@ def history_window_min(quote: Quote, years: int) -> Optional[float]:
     return float(window.min())
 
 
+def history_window_max(quote: Quote, years: int) -> Optional[float]:
+    trading_days = 252 * years
+    close = quote.close_history.dropna()
+    if len(close) < 30:
+        return None
+    window = close.iloc[-trading_days - 1 : -1] if len(close) > trading_days else close.iloc[:-1]
+    if window.empty:
+        return None
+    return float(window.max())
+
+
+def auto_overhang_levels(quote: Quote) -> Optional[Dict[str, float]]:
+    low_1y = history_window_min(quote, 1)
+    high_1y = history_window_max(quote, 1)
+    if low_1y is None or high_1y is None or high_1y <= low_1y:
+        return None
+
+    span = high_1y - low_1y
+    return {
+        "deep_value_low": low_1y,
+        "deep_value_high": low_1y + span * 0.16,
+        "support_low": low_1y + span * 0.16,
+        "support_high": low_1y + span * 0.32,
+        "current_battle_zone_low": low_1y + span * 0.32,
+        "current_battle_zone_high": low_1y + span * 0.52,
+        "near_resistance_low": low_1y + span * 0.52,
+        "near_resistance_high": low_1y + span * 0.68,
+        "heavy_overhang_low": low_1y + span * 0.68,
+        "heavy_overhang_high": high_1y,
+    }
+
+
 def check_stock_rules(stock: Dict[str, Any], quote: Quote, global_rules: Dict[str, Any]) -> List[str]:
     alerts: List[str] = []
     name = stock["name"]
@@ -1063,6 +1173,18 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
             ]
         )
 
+    if stock.get("overhang_watch", {}).get("enabled", True):
+        read, decision = overhang_watch_readout(stock, quote)
+        rows.append(
+            [
+                f"{name} ({stock['ticker']})",
+                "套牢盘压力 / holder overhang",
+                quote_metrics_inline(quote),
+                read,
+                decision,
+            ]
+        )
+
     entry_row = entry_alert_row(stock, quote)
     if entry_row:
         rows.append(entry_row)
@@ -1074,8 +1196,7 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
                 "持仓大涨 / held strength",
                 quote_metrics_inline(quote),
                 f"单日上涨 {quote.daily_pct:+.2f}%，符合你的强势日检查纪律",
-                "不追高；检查是否减一点、锁利润，或换入更低位标的\n"
-                + framework_readout(stock, quote, ["strong daily move"]),
+                "不追高；检查是否减一点、锁利润，或换入更低位标的",
             ]
         )
 
@@ -1086,8 +1207,7 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
                 "持仓连续走强 / 5d strength",
                 quote_metrics_inline(quote),
                 f"5个交易日上涨 {quote.five_day_pct:+.2f}%，不是单日随机波动",
-                "评估是否把一小部分利润轮动出去\n"
-                + framework_readout(stock, quote, ["strong 5-day move"]),
+                "评估是否把一小部分利润轮动出去",
             ]
         )
 
@@ -1102,8 +1222,7 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
                 "市场确认重估 / re-rating",
                 quote_metrics_inline(quote),
                 f"价格强势且成交量约 {ratio:.1f}x，说明有真实资金参与",
-                "提高研究优先级；确认财报、订单、指引或监管变化是否支撑\n"
-                + framework_readout(stock, quote, ["market-confirmed re-rating"]),
+                "提高研究优先级；确认财报、订单、指引或监管变化是否支撑",
             ]
         )
 
@@ -1117,8 +1236,7 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
                     f"接近{years}年低位 / near {years}Y low",
                     quote_metrics_inline(quote),
                     f"当前 {quote.last:.2f}，{years}年低点约 {low:.2f}",
-                    "进入投研优先区；先判断是错杀还是价值陷阱，再考虑分批\n"
-                    + framework_readout(stock, quote, [f"near {years}Y low"]),
+                    "进入投研优先区；先判断是错杀还是价值陷阱，再考虑分批",
                 ]
             )
 
@@ -1356,8 +1474,6 @@ def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote])
                         f"   目标数据：{quote_metrics_inline(to_quote)}",
                         "   机会理由：",
                         indent_text(short_reasons(to_reasons)),
-                        "   交易框架：",
-                        indent_text(framework_readout(to_stock, to_quote, to_reasons)),
                         "   红旗核查：",
                         indent_text(red_flag_news_check(to_stock)),
                         "   大V观点：",
@@ -1553,46 +1669,38 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
                 ]
             ]
 
-    if rotation_alerts or stock_rows or stock_errors or indicator_alerts:
-        summary = framework_summary(config)
-        if summary:
-            lines.append(summary)
-            lines.append("")
-
     if rotation_alerts:
-        lines.append("一、可能的调仓决策 / Potential Rotation Decisions")
-        lines.append("----------------------------")
+        lines.append("一、最值得处理的调仓信号")
+        lines.append("----------------")
         lines.append("\n\n".join(rotation_alerts))
         lines.append("")
 
     if stock_rows or stock_errors:
-        lines.append("二、个股机会或风险提示 / Stock-Level Signals")
-        lines.append("--------------------------------")
+        lines.append("二、个股分析与结论")
+        lines.append("----------------")
         if stock_rows:
             lines.append(stock_signal_blocks(stock_rows))
         if stock_errors:
             lines.append("")
-            lines.append("数据异常 / Data exceptions")
+            lines.append("数据异常")
             lines.append("\n\n".join(stock_errors))
         lines.append("")
 
     if indicator_alerts:
-        lines.append("三、市场情绪背景 / Market Sentiment Context")
-        lines.append("----------------------------")
+        lines.append("三、市场背景")
+        lines.append("----------")
         lines.append("\n\n".join(indicator_alerts))
         lines.append("")
 
     if influencer_rows:
         influencer_section = "四" if indicator_alerts else "三"
-        lines.append(f"{influencer_section}、交易高手观点雷达 / Influencer Radar")
-        lines.append("----------------------------")
+        lines.append(f"{influencer_section}、交易高手观点雷达")
+        lines.append("-------------------")
         lines.append(influencer_blocks(influencer_rows))
-        lines.append("说明：这里抓取的是公开新闻/RSS可见信息，很多交易者的实时观点可能在付费社区、X、YouTube 或直播中，不一定能被完整覆盖。")
         lines.append("")
 
     if not rotation_alerts and not stock_rows and not stock_errors and not indicator_alerts:
-        lines.append("结论：今天没有达到 CEO 决策级别的信号。建议继续观察，不做动作。")
-        lines.append("Conclusion: no CEO-level decision signal was triggered today. Recommendation: stay patient and take no action.")
+        lines.append("结论：今天没有达到决策级别的新信号，继续观察，不做动作。")
 
     quality_report = fetch_quality_report()
     if quality_report:
