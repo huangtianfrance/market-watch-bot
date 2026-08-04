@@ -989,41 +989,65 @@ def executive_summary(rotation_alerts: List[str], stock_rows: List[List[str]], i
     return "\n".join(f"- {line}" for line in unique_lines(actions))
 
 
-def decision_signal_table(rows: List[List[str]], max_rows: int = 12) -> str:
-    ranked: List[List[str]] = []
+def row_priority_score(row: List[str]) -> int:
     priority_keys = [
         "deep pullback",
-        "near",
+        "低位",
         "重估",
         "re-rating",
         "held strength",
+        "持仓大涨",
+        "5d strength",
         "daily price-volume watch",
+        "每日量价观察",
         "套牢盘压力",
     ]
+    text = f"{row[1]} {row[3]} {row[4]}".lower()
+    for index, key in enumerate(priority_keys):
+        if key in text:
+            return index
+    return len(priority_keys)
 
-    def score(row: List[str]) -> int:
-        text = f"{row[1]} {row[3]} {row[4]}".lower()
-        for index, key in enumerate(priority_keys):
-            if key in text:
-                return index
-        return len(priority_keys)
 
-    ranked = sorted(rows, key=score)[:max_rows]
+def top_signal_rows(rows: List[List[str]], max_rows: int = 6) -> List[List[str]]:
+    ranked = sorted(rows, key=row_priority_score)
+    top_rows = ranked[:max_rows]
+    return top_rows
+
+
+def decision_signal_table(rows: List[List[str]], max_rows: int = 6) -> str:
+    ranked = top_signal_rows(rows, max_rows=max_rows)
     table_rows: List[List[str]] = []
     for name, signal_type, metrics, analysis, decision in ranked:
         table_rows.append(
             [
                 name,
-                signal_type,
-                trim_text(metrics, 64),
-                trim_text(analysis, 90),
-                trim_text(decision, 90),
+                trim_text(signal_type, 30),
+                trim_text(metrics, 48),
+                trim_text(analysis, 68),
+                trim_text(decision, 68),
             ]
         )
     return markdown_table(
         ["标的 / Asset", "信号 / Signal", "数据 / Snapshot", "判断 / Read", "动作 / Action"],
         table_rows,
     )
+
+
+def concise_signal_briefs(rows: List[List[str]], max_rows: int = 4) -> str:
+    briefs: List[str] = []
+    for name, signal_type, metrics, analysis, decision in top_signal_rows(rows, max_rows=max_rows):
+        briefs.append(
+            "\n".join(
+                [
+                    f"**{name}**",
+                    f"- 信号 / Signal: {trim_text(signal_type, 36)}",
+                    f"- 判断 / Read: {trim_text(plain_text(analysis), 120)}",
+                    f"- 动作 / Action: {trim_text(plain_text(decision), 120)}",
+                ]
+            )
+        )
+    return "\n\n".join(briefs)
 
 
 def portfolio_diagnosis(rows: List[List[str]]) -> str:
@@ -1070,6 +1094,30 @@ def market_temperature(indicator_alerts: List[str]) -> str:
     return "\n\n".join(indicator_alerts[:4])
 
 
+def not_expanded_today(config: Dict[str, Any], quote_cache: Dict[str, Quote], expanded_rows: List[List[str]]) -> str:
+    expanded_names = {row[0].split(" (")[0] for row in expanded_rows}
+    omitted: List[str] = []
+    for stock in [item for item in config.get("stocks", []) if not item.get("disabled")]:
+        name = stock.get("name", "")
+        if name in expanded_names or stock.get("position", 0) > 0:
+            continue
+        try:
+            quote = get_quote(stock["ticker"], quote_cache)
+        except Exception:
+            continue
+        position_label = one_year_position_label(quote)
+        ratio = one_year_position_ratio(quote)
+        if ratio is None:
+            continue
+        if ratio >= 0.65:
+            omitted.append(f"- {name}: {position_label}，离一年低位已经不近，今天没有新催化，不单独展开。")
+        elif ratio >= 0.35:
+            omitted.append(f"- {name}: {position_label}，还在中间区间，没有新的亮点或警示点。")
+    if not omitted:
+        return ""
+    return "\n".join(omitted[:12])
+
+
 def experience_reminders() -> str:
     reminders = [
         "好股票也要买在好价格；腾讯的历史交易已经验证，时机和价格同样重要。",
@@ -1080,6 +1128,17 @@ def experience_reminders() -> str:
         "Time does not fix every mistake; OVH showed that wrong picks or wrong timing cannot always be repaired by waiting.",
     ]
     return "\n".join(f"- {line}" for line in reminders)
+
+
+def should_include_influencer_section(rotation_alerts: List[str], stock_rows: List[List[str]]) -> bool:
+    if rotation_alerts:
+        return True
+    important_keywords = ["deep pullback", "低位", "re-rating", "重估", "held strength", "持仓大涨"]
+    for row in stock_rows:
+        text = f"{row[1]} {row[3]} {row[4]}".lower()
+        if any(keyword in text for keyword in important_keywords):
+            return True
+    return False
 
 
 def explain_low_signal() -> str:
@@ -1199,6 +1258,38 @@ def history_window_max(quote: Quote, years: int) -> Optional[float]:
     return float(window.max())
 
 
+def one_year_position_ratio(quote: Quote) -> Optional[float]:
+    low_1y = history_window_min(quote, 1)
+    high_1y = history_window_max(quote, 1)
+    if low_1y is None or high_1y is None or high_1y <= low_1y:
+        return None
+    return (quote.last - low_1y) / (high_1y - low_1y)
+
+
+def one_year_position_label(quote: Quote) -> str:
+    ratio = one_year_position_ratio(quote)
+    if ratio is None:
+        return "一年区间位置不明 / 1Y position unavailable"
+    if ratio >= 0.85:
+        return "接近一年高位 / near 1Y high"
+    if ratio >= 0.65:
+        return "一年区间中上部 / upper half of 1Y range"
+    if ratio >= 0.35:
+        return "一年区间中部 / middle of 1Y range"
+    if ratio >= 0.15:
+        return "接近一年低位上方 / above the 1Y low zone"
+    return "接近一年低位 / near 1Y low"
+
+
+def should_expand_overhang_watch(stock: Dict[str, Any], quote: Quote) -> bool:
+    if stock.get("position", 0) > 0:
+        return True
+    ratio = one_year_position_ratio(quote)
+    if ratio is None:
+        return True
+    return ratio <= 0.55
+
+
 def auto_overhang_levels(quote: Quote) -> Optional[Dict[str, float]]:
     low_1y = history_window_min(quote, 1)
     high_1y = history_window_max(quote, 1)
@@ -1313,7 +1404,7 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
             ]
         )
 
-    if stock.get("overhang_watch", {}).get("enabled", True):
+    if stock.get("overhang_watch", {}).get("enabled", True) and should_expand_overhang_watch(stock, quote):
         read, decision = overhang_watch_readout(stock, quote)
         rows.append(
             [
@@ -1794,9 +1885,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
             )
 
     influencer_rows: List[List[str]] = []
-    if config.get("influencer_watch", {}).get("enabled", False) and (
-        rotation_alerts or stock_rows or stock_errors or indicator_alerts
-    ):
+    if config.get("influencer_watch", {}).get("enabled", False) and should_include_influencer_section(rotation_alerts, stock_rows):
         try:
             influencer_rows = influencer_latest_rows(config)
         except Exception as exc:
@@ -1821,18 +1910,18 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append("二、可执行信号 / Actionable Signals")
         lines.append("----------------------------------")
         if stock_rows:
-            lines.append(decision_signal_table(stock_rows))
+            lines.append(concise_signal_briefs(stock_rows, max_rows=4))
             lines.append("")
         if rotation_alerts:
             lines.append("重点调仓候选 / Rotation Candidates")
-            lines.append("\n\n".join(rotation_alerts[:3]))
+            lines.append("\n\n".join(rotation_alerts[:2]))
         lines.append("")
 
     if stock_rows or stock_errors:
         lines.append("三、持仓与观察诊断 / Portfolio & Watchlist Diagnosis")
         lines.append("--------------------------------------------------")
         if stock_rows:
-            lines.append(portfolio_diagnosis(stock_rows))
+            lines.append(portfolio_diagnosis(top_signal_rows(stock_rows, max_rows=8)))
         if stock_errors:
             lines.append("")
             lines.append("数据异常 / Data Exceptions")
@@ -1845,13 +1934,20 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append(market_temperature(indicator_alerts))
         lines.append("")
 
-    if influencer_rows:
-        lines.append("五、高手雷达 / Influencer Radar")
-        lines.append("--------------------------------")
-        lines.append(influencer_blocks(influencer_rows))
+    omitted_section = not_expanded_today(config, quote_cache, stock_rows)
+    if omitted_section:
+        lines.append("五、今天不单独展开 / Not Expanded Today")
+        lines.append("-------------------------------------")
+        lines.append(omitted_section)
         lines.append("")
 
-    lines.append("六、经验提醒 / Experience Reminders")
+    if influencer_rows:
+        lines.append("六、高手雷达 / Influencer Radar")
+        lines.append("--------------------------------")
+        lines.append(influencer_blocks(influencer_rows[:3]))
+        lines.append("")
+
+    lines.append("七、经验提醒 / Experience Reminders")
     lines.append("-----------------------------------")
     lines.append(experience_reminders())
     lines.append("")
