@@ -1041,9 +1041,10 @@ def concise_signal_briefs(rows: List[List[str]], max_rows: int = 4) -> str:
             "\n".join(
                 [
                     f"**{name}**",
-                    f"- 信号 / Signal: {trim_text(signal_type, 36)}",
-                    f"- 判断 / Read: {trim_text(plain_text(analysis), 120)}",
-                    f"- 动作 / Action: {trim_text(plain_text(decision), 120)}",
+                    f"- {trim_text(signal_type, 36)}",
+                    f"- 数据 / Snapshot: {trim_text(metrics, 72)}",
+                    f"- 判断 / Read: {trim_text(plain_text(analysis), 108)}",
+                    f"- 动作 / Action: {trim_text(plain_text(decision), 108)}",
                 ]
             )
         )
@@ -1088,10 +1089,315 @@ def portfolio_diagnosis(rows: List[List[str]]) -> str:
     return "\n\n".join(blocks)
 
 
+def tight_portfolio_diagnosis(rows: List[List[str]], max_names: int = 6) -> str:
+    sections = grouped_stock_sections(rows)[:max_names]
+    lines: List[str] = []
+    for name, metrics, stock_rows in sections:
+        read = trim_text(plain_text(stock_rows[0][3]), 96)
+        action = trim_text(plain_text(stock_rows[0][4]), 96)
+        lines.append(f"- **{name}**: {read} 动作：{action}")
+    return "\n".join(lines)
+
+
 def market_temperature(indicator_alerts: List[str]) -> str:
     if not indicator_alerts:
         return "今天没有新的宏观/情绪硬信号。/ No new macro or sentiment hard trigger today."
     return "\n\n".join(indicator_alerts[:4])
+
+
+def compact_market_temperature(indicator_alerts: List[str], max_items: int = 3) -> str:
+    if not indicator_alerts:
+        return ""
+    return "\n".join(f"- {trim_text(plain_text(text), 150)}" for text in indicator_alerts[:max_items])
+
+
+def quote_by_indicator_name(config: Dict[str, Any], quote_cache: Dict[str, Quote], name: str) -> Optional[Quote]:
+    for indicator in config.get("market_indicators", []):
+        if indicator.get("name") == name and indicator.get("type") != "crypto_fear_greed":
+            try:
+                return get_quote(indicator["ticker"], quote_cache)
+            except Exception:
+                return None
+    return None
+
+
+def geo_stock_lines(scenario: Dict[str, Any], tickers: List[str]) -> List[str]:
+    stock_map = scenario.get("stock_impact", {})
+    lines: List[str] = []
+    for ticker in tickers:
+        if ticker in stock_map:
+            lines.append(f"- {ticker}: {stock_map[ticker]}")
+    return lines
+
+
+def geo_theme_block(
+    scenario: Dict[str, Any],
+    score: int,
+    state: str,
+    market_trade: str,
+    read: str,
+    impact: str,
+    proxies: str,
+    stock_lines: List[str],
+) -> str:
+    notes = scenario.get("notes", {})
+    duration = notes.get("base_case_duration", "unknown")
+    watch_for_change = notes.get("watch_for_change", "")
+    lines = [
+        f"主线 / Theme: {scenario.get('label', 'Geopolitics')}",
+        f"评分 / Score: {score}/5",
+        f"状态 / State: {state}",
+        f"市场在交易什么 / What the market is trading: {market_trade}",
+        f"市场读法 / Market read: {read}",
+        f"对组合的含义 / Portfolio impact: {impact}",
+        f"预计持续 / Expected duration: {duration}",
+        f"变化观察点 / Watch for change: {watch_for_change}",
+        f"关键市场代理 / Key market proxies: {proxies}",
+    ]
+    if stock_lines:
+        lines.extend(["影响地图 / Impact map:"] + stock_lines)
+    return "\n".join(lines)
+
+
+def evaluate_middle_east_theme(config: Dict[str, Any], quote_cache: Dict[str, Quote], scenario: Dict[str, Any]) -> Optional[Tuple[int, str]]:
+    brent = quote_by_indicator_name(config, quote_cache, "Brent Crude")
+    vix = quote_by_indicator_name(config, quote_cache, "VIX")
+    tnx = quote_by_indicator_name(config, quote_cache, "US 10Y Yield")
+    qqq = quote_by_indicator_name(config, quote_cache, "Nasdaq 100 ETF")
+    if not brent or not vix or not tnx or not qqq:
+        return None
+
+    oil_up = brent.five_day_pct is not None and brent.five_day_pct >= float(scenario.get("oil_spike_5d_pct", 6.0))
+    oil_down = brent.five_day_pct is not None and brent.five_day_pct <= float(scenario.get("oil_drop_5d_pct", -4.0))
+    vix_high = vix.last >= float(scenario.get("vix_fear_level", 25.0))
+    tnx_high = tnx.last >= float(scenario.get("tnx_risk_level", 47.0))
+    qqq_risk_on = qqq.five_day_pct is not None and qqq.five_day_pct >= float(scenario.get("risk_on_qqq_5d_pct", 2.5))
+
+    score = 1
+    state = "中性 / mixed"
+    market_trade = "市场没有把中东单独当成主导变量，更多还是把它当成油价、通胀预期和风险偏好的次级扰动。"
+    read = "地缘主线暂时没有压倒其他宏观变量，市场仍在多因素混合定价。"
+    impact = "对你的组合来说，更适合继续看个股自己的位置、量价和基本面，而不是按宏观新闻直接追单。"
+    if oil_up and (vix_high or tnx_high):
+        score = 5
+        state = "升级压力 / escalation pressure"
+        market_trade = "市场在交易油价上行、通胀再抬头、长端利率更难下去，以及高估值科技股估值被再压一次。"
+        read = scenario.get("notes", {}).get("escalation", read)
+        impact = (
+            "传导链：油价上 -> 通胀担忧上 -> 长端利率偏高 -> 科技估值承压；"
+            "同时风险偏好下降，更不利于 Oracle、Apple、PDD 这类需要更低贴现率或更强风险偏好的标的。"
+        )
+    elif oil_down and qqq_risk_on and not vix_high:
+        score = 4
+        state = "降温修复 / de-escalation repair"
+        market_trade = "市场在交易地缘降温后的风险修复，重点不是油，而是利率压力缓和后科技和成长股的反弹空间。"
+        read = scenario.get("notes", {}).get("deescalation", read)
+        impact = (
+            "传导链：油价下 -> 通胀担忧缓和 -> 利率压力减轻 -> 科技与成长修复。"
+            "这通常利好 Oracle / Microsoft / Apple 的反弹，也利于 Airbus 维持风险偏好，但更像修复而不是无脑追高环境。"
+        )
+
+    stock_lines = geo_stock_lines(scenario, ["AIR.PA", "ORCL", "MSFT", "AAPL", "PDD", "BTC-USD"])
+    return score, geo_theme_block(
+        scenario,
+        score,
+        state,
+        market_trade,
+        read,
+        impact,
+        f"Brent {pct_line(brent.five_day_pct)} over 5d, VIX {vix.last:.2f}, US10Y {tnx.last/10:.2f}%, QQQ {pct_line(qqq.five_day_pct)} over 5d.",
+        stock_lines,
+    )
+
+
+def evaluate_china_theme(config: Dict[str, Any], quote_cache: Dict[str, Quote], scenario: Dict[str, Any]) -> Optional[Tuple[int, str]]:
+    hsi = quote_by_indicator_name(config, quote_cache, "Hang Seng Index")
+    eurcny = quote_by_indicator_name(config, quote_cache, "EUR/CNY")
+    qqq = quote_by_indicator_name(config, quote_cache, "Nasdaq 100 ETF")
+    if not hsi or not eurcny or not qqq:
+        return None
+
+    hsi_weak = hsi.five_day_pct is not None and hsi.five_day_pct <= float(scenario.get("hsi_five_day_risk_off", -3.0))
+    eurcny_stress = eurcny.five_day_pct is not None and eurcny.five_day_pct >= float(scenario.get("eurcny_five_day_stress", 1.0))
+    qqq_soft = qqq.five_day_pct is not None and qqq.five_day_pct <= float(scenario.get("qqq_five_day_semis_stress", -2.5))
+
+    score = 1
+    state = "中性 / mixed"
+    market_trade = "市场把这条线当成估值折价因子，而不是每天都立刻触发的大波动来源。"
+    read = "中美/中国ADR/半导体限制主线暂时没有压倒其他变量。"
+    impact = "如果没有新的限制升级，China ADR 和 AI 硬件链更受自身财报、估值和风险偏好驱动。"
+    if hsi_weak and (eurcny_stress or qqq_soft):
+        score = 5
+        state = "限制压力 / restriction pressure"
+        market_trade = "市场在交易政策与资本通道风险，先砍 China ADR 的估值，再压半导体和苹果这类有中国敞口的链条情绪。"
+        read = scenario.get("notes", {}).get("escalation", read)
+        impact = (
+            "传导链：HK/China 风险偏好下滑 -> China ADR 折价扩大 -> 半导体/AI 链条情绪转弱。"
+            "这通常压制 PDD / JD / Tencent 的修复，也会拖累 Apple 与 AI 硬件情绪。"
+        )
+    elif not hsi_weak and qqq.five_day_pct is not None and qqq.five_day_pct > 0:
+        score = 3
+        state = "可控 / manageable"
+        market_trade = "市场在交易‘政策风险还在，但短期并未打断修复’，所以资金会继续在中概修复和AI链里做选择性回流。"
+        read = scenario.get("notes", {}).get("deescalation", read)
+        impact = (
+            "市场暂时把最新限制消息视为可管理，而不是立即打断中国ADR或AI链主线。"
+            "这更利于 PDD / Tencent 这类修复票维持反弹，但不等于政策风险消失。"
+        )
+
+    stock_lines = geo_stock_lines(scenario, ["PDD", "JD", "0700.HK", "AAPL", "ORCL", "NVDA"])
+    return score, geo_theme_block(
+        scenario,
+        score,
+        state,
+        market_trade,
+        read,
+        impact,
+        f"HSI {pct_line(hsi.five_day_pct)} over 5d, EUR/CNY {pct_line(eurcny.five_day_pct)} over 5d, QQQ {pct_line(qqq.five_day_pct)} over 5d.",
+        stock_lines,
+    )
+
+
+def evaluate_europe_defense_theme(config: Dict[str, Any], quote_cache: Dict[str, Quote], scenario: Dict[str, Any]) -> Optional[Tuple[int, str]]:
+    dax = quote_by_indicator_name(config, quote_cache, "DAX")
+    cac = quote_by_indicator_name(config, quote_cache, "CAC 40")
+    brent = quote_by_indicator_name(config, quote_cache, "Brent Crude")
+    vix = quote_by_indicator_name(config, quote_cache, "VIX")
+    if not dax or not cac or not brent or not vix:
+        return None
+
+    dax_bid = dax.five_day_pct is not None and dax.five_day_pct >= float(scenario.get("dax_five_day_defense_bid", 2.0))
+    cac_bid = cac.five_day_pct is not None and cac.five_day_pct >= float(scenario.get("cac_five_day_defense_bid", 1.5))
+    brent_stress = brent.five_day_pct is not None and brent.five_day_pct >= float(scenario.get("brent_five_day_stress", 4.0))
+    vix_risk = vix.last >= float(scenario.get("vix_risk_level", 22.0))
+
+    score = 1
+    state = "中性 / mixed"
+    market_trade = "市场还没有把欧洲防务单独抬成最强风格，更多是把它当成工业、财政和安全预算的中期配置方向。"
+    read = "欧洲防务/俄乌安全周期主线暂时没有明显加强。"
+    impact = "如果安全溢价没有继续上升，欧洲防务相关票更偏向看各自估值和订单兑现。"
+    if (dax_bid or cac_bid) and (brent_stress or vix_risk):
+        score = 4
+        state = "安全溢价 / security bid"
+        market_trade = "市场在交易欧洲再武装、国防预算上修和防务订单可见度，而不是单纯避险。"
+        read = scenario.get("notes", {}).get("escalation", read)
+        impact = (
+            "市场在把部分资金转向安全与防务支出受益方向，而不是全面恐慌。"
+            "这通常相对利好 Airbus、Leonardo、BAE、Rheinmetall 等欧洲防务链。"
+        )
+    elif not brent_stress and not vix_risk:
+        score = 2
+        state = "降温 / cooling"
+        market_trade = "市场仍承认防务长期逻辑，但短期没有继续追价，更多回到订单兑现和估值消化。"
+        read = scenario.get("notes", {}).get("deescalation", read)
+        impact = (
+            "如果安全溢价降温，欧洲防务股更容易从主题驱动转回估值/业绩驱动；"
+            "Airbus 这类更混合的工业龙头则更看整体风险偏好。"
+        )
+
+    stock_lines = geo_stock_lines(scenario, ["AIR.PA", "LDO.MI", "SAF.PA", "BA.L", "RHM.DE"])
+    return score, geo_theme_block(
+        scenario,
+        score,
+        state,
+        market_trade,
+        read,
+        impact,
+        f"DAX {pct_line(dax.five_day_pct)} over 5d, CAC {pct_line(cac.five_day_pct)} over 5d, Brent {pct_line(brent.five_day_pct)} over 5d, VIX {vix.last:.2f}.",
+        stock_lines,
+    )
+
+
+def geopolitical_main_theme(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> str:
+    framework = config.get("geopolitical_framework", {})
+    if not framework.get("enabled", False):
+        return ""
+    max_active = int(framework.get("max_active_themes", 3))
+    scenarios = framework.get("scenarios", {})
+    evaluated: List[Tuple[int, int, str]] = []
+
+    evaluators = {
+        "middle_east": evaluate_middle_east_theme,
+        "china_adr_semis": evaluate_china_theme,
+        "europe_defense_ukraine": evaluate_europe_defense_theme,
+    }
+
+    for key, scenario in scenarios.items():
+        if not scenario.get("enabled", False):
+            continue
+        evaluator = evaluators.get(key)
+        if not evaluator:
+            continue
+        result = evaluator(config, quote_cache, scenario)
+        if not result:
+            continue
+        score, text = result
+        priority = int(scenario.get("priority", 99))
+        evaluated.append((score, -priority, text))
+
+    if not evaluated:
+        return ""
+
+    evaluated.sort(reverse=True)
+    sections = [item[2] for item in evaluated[:max_active]]
+    header = [
+        f"{framework.get('title', 'Geopolitical Main Themes')}",
+        f"口径 / Framework: {framework.get('focus', '')}",
+    ]
+    return "\n\n".join(["\n".join(header)] + sections)
+
+
+def compact_geopolitical_themes(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> str:
+    framework = config.get("geopolitical_framework", {})
+    if not framework.get("enabled", False):
+        return ""
+
+    max_active = int(framework.get("max_active_themes", 3))
+    scenarios = framework.get("scenarios", {})
+    evaluators = {
+        "middle_east": evaluate_middle_east_theme,
+        "china_adr_semis": evaluate_china_theme,
+        "europe_defense_ukraine": evaluate_europe_defense_theme,
+    }
+    evaluated: List[Tuple[int, int, str, str]] = []
+
+    for key, scenario in scenarios.items():
+        if not scenario.get("enabled", False):
+            continue
+        evaluator = evaluators.get(key)
+        if not evaluator:
+            continue
+        result = evaluator(config, quote_cache, scenario)
+        if not result:
+            continue
+        score, text = result
+        priority = int(scenario.get("priority", 99))
+        evaluated.append((score, -priority, scenario.get("label", key), text))
+
+    if not evaluated:
+        return ""
+
+    evaluated.sort(reverse=True)
+    lines: List[str] = []
+    for score, _, label, text in evaluated[:max_active]:
+        picked: Dict[str, str] = {}
+        for raw in text.splitlines():
+            if ": " not in raw:
+                continue
+            key, value = raw.split(": ", 1)
+            picked[key] = value
+        lines.append(
+            "\n".join(
+                [
+                    f"**{label} | {score}/5**",
+                    f"- 状态 / State: {trim_text(picked.get('状态 / State', ''), 44)}",
+                    f"- 市场在交易 / Market focus: {trim_text(picked.get('市场在交易什么 / What the market is trading', ''), 120)}",
+                    f"- 持续窗口 / Duration: {trim_text(picked.get('预计持续 / Expected duration', ''), 42)}",
+                    f"- 失效观察 / Watch: {trim_text(picked.get('变化观察点 / Watch for change', ''), 120)}",
+                ]
+            )
+        )
+    return "\n\n".join(lines)
 
 
 def not_expanded_today(config: Dict[str, Any], quote_cache: Dict[str, Quote], expanded_rows: List[List[str]]) -> str:
@@ -1918,20 +2224,26 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append("")
 
     if stock_rows or stock_errors:
-        lines.append("三、持仓与观察诊断 / Portfolio & Watchlist Diagnosis")
-        lines.append("--------------------------------------------------")
+        lines.append("三、组合诊断 / Portfolio Diagnosis")
+        lines.append("-----------------------------------")
         if stock_rows:
-            lines.append(portfolio_diagnosis(top_signal_rows(stock_rows, max_rows=8)))
+            lines.append(tight_portfolio_diagnosis(top_signal_rows(stock_rows, max_rows=6)))
         if stock_errors:
             lines.append("")
             lines.append("数据异常 / Data Exceptions")
             lines.append("\n\n".join(stock_errors))
         lines.append("")
 
-    if indicator_alerts:
+    geo_section = compact_geopolitical_themes(config, quote_cache)
+
+    if indicator_alerts or geo_section:
         lines.append("四、市场温度 / Market Temperature")
         lines.append("--------------------------------")
-        lines.append(market_temperature(indicator_alerts))
+        if geo_section:
+            lines.append(geo_section)
+            lines.append("")
+        if indicator_alerts:
+            lines.append(compact_market_temperature(indicator_alerts))
         lines.append("")
 
     omitted_section = not_expanded_today(config, quote_cache, stock_rows)

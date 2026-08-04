@@ -1023,6 +1023,12 @@ stocks:
           - "China ADR or regulatory risk materially worsens"
 
 market_indicators:
+  - name: Brent Crude
+    ticker: BZ=F
+    rules:
+      watch_only: true
+    notes: "Geopolitical oil-risk proxy. Rising oil can tighten inflation expectations and pressure long-duration growth."
+
   - name: Crypto Fear & Greed
     type: crypto_fear_greed
     ticker: CRYPTO_FNG
@@ -1088,3 +1094,69 @@ market_indicators:
   - name: Nasdaq 100 ETF
     ticker: QQQ
     notes: "AI / mega-cap tech risk appetite proxy."
+
+geopolitical_framework:
+  enabled: true
+  title: "Geopolitical Main Themes"
+  focus: "Map geopolitics into oil, yields, risk appetite, and stock impact rather than summarizing headlines."
+  max_active_themes: 3
+  scenarios:
+    middle_east:
+      enabled: true
+      label: "Middle East / Oil route risk"
+      priority: 1
+      oil_spike_5d_pct: 6.0
+      oil_drop_5d_pct: -4.0
+      vix_fear_level: 25.0
+      tnx_risk_level: 47.0
+      risk_on_qqq_5d_pct: 2.5
+      notes:
+        escalation: "If oil rises, VIX stays elevated, and yields remain high, markets are pricing inflation and disruption risk."
+        deescalation: "If oil falls and QQQ rebounds while VIX cools, markets are pricing temporary de-escalation rather than a full structural reset."
+        base_case_duration: "days to a few weeks"
+        watch_for_change: "Watch Brent, VIX, the U.S. 10Y, and any sudden shift in Hormuz/shipping headlines. If oil stops rising or falls back quickly, this theme can lose rank fast."
+      stock_impact:
+        AIR.PA: "Lower oil and calmer geopolitics usually help airlines/order confidence and cyclical sentiment, but sharp risk-off hurts aerospace cyclicals."
+        ORCL: "Oracle benefits when yields and macro fear cool; renewed oil/inflation stress usually hurts long-duration AI capex names."
+        MSFT: "Microsoft is relatively more defensive than Oracle, but still prefers lower yields and calmer risk appetite."
+        AAPL: "Apple usually prefers falling yields and lower macro stress; oil/inflation shocks compress premium valuation."
+        PDD: "China ADRs need both calmer global risk appetite and better China/HK sentiment; geopolitics can still cap re-rating."
+        BTC-USD: "Bitcoin can benefit from liquidity easing after panic, but oil/inflation shocks and tighter real yields are usually a headwind first."
+    china_adr_semis:
+      enabled: true
+      label: "US-China / China ADR and semiconductor restrictions"
+      priority: 2
+      hsi_five_day_risk_off: -3.0
+      eurcny_five_day_stress: 1.0
+      qqq_five_day_semis_stress: -2.5
+      notes:
+        escalation: "If Hong Kong/China risk appetite weakens, EUR/CNY moves abruptly, and AI/semiconductor proxies soften, markets are pricing tighter U.S.-China tech and capital-access risk."
+        deescalation: "If Hang Seng stabilizes and QQQ/AI proxies recover, markets are treating the latest restriction headlines as manageable rather than thesis-breaking."
+        base_case_duration: "weeks to months"
+        watch_for_change: "Watch Hang Seng, EUR/CNY, NVDA/AI hardware sentiment, and any new export-control, tariff, or ADR access headlines. This theme changes only when policy tone clearly shifts."
+      stock_impact:
+        PDD: "PDD needs both China consumer resilience and stable cross-border policy conditions; tighter U.S./EU policy pressure can block re-rating."
+        JD: "JD is more domestic than Temu-heavy names, but China risk-off still caps valuation expansion."
+        0700.HK: "Tencent usually needs calmer China platform policy and better HK risk appetite to rerate."
+        AAPL: "Apple is sensitive to China demand, supply chain exposure, and tariff/restriction narratives."
+        ORCL: "Oracle can be hit indirectly if broader AI/semi restriction headlines pressure capex sentiment across the stack."
+        NVDA: "Nvidia and the wider AI hardware chain are direct sentiment transmission channels for semiconductor restriction headlines."
+    europe_defense_ukraine:
+      enabled: true
+      label: "Europe defense / Russia-Ukraine security cycle"
+      priority: 3
+      dax_five_day_defense_bid: 2.0
+      cac_five_day_defense_bid: 1.5
+      brent_five_day_stress: 4.0
+      vix_risk_level: 22.0
+      notes:
+        escalation: "If European indices hold up while defense names attract bids and risk indicators rise only moderately, markets are rotating toward security and defense spending rather than full panic."
+        deescalation: "If defense momentum cools and broader cyclicals reclaim leadership, markets are shifting away from war-premium pricing."
+        base_case_duration: "months to quarters"
+        watch_for_change: "Watch DAX, CAC, defense leaders versus broader cyclicals, and budget/procurement headlines. This theme weakens if defense names stop leading or if broader macro risk appetite takes over."
+      stock_impact:
+        AIR.PA: "Airbus can benefit from defense/security budgets and European industrial confidence, but broad risk-off still hurts the cyclical multiple."
+        LDO.MI: "Leonardo is a direct beneficiary when Europe reprices defense urgency."
+        SAF.PA: "Safran benefits more indirectly through aerospace confidence and defense/aftermarket resilience."
+        BA.L: "BAE Systems is one of the clearest listed expressions of a stronger Europe/UK defense cycle."
+        RHM.DE: "Rheinmetall is a high-beta proxy for continental European rearmament expectations."
