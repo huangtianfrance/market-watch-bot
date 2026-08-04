@@ -942,6 +942,146 @@ def influencer_blocks(rows: List[List[str]]) -> str:
     return "\n\n".join(blocks)
 
 
+def unique_lines(items: List[str]) -> List[str]:
+    seen: Set[str] = set()
+    out: List[str] = []
+    for item in items:
+        cleaned = item.strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        out.append(cleaned)
+    return out
+
+
+def grouped_stock_sections(rows: List[List[str]]) -> List[Tuple[str, str, List[List[str]]]]:
+    grouped: Dict[str, List[List[str]]] = {}
+    for row in rows:
+        grouped.setdefault(row[0], []).append(row)
+
+    sections: List[Tuple[str, str, List[List[str]]]] = []
+    for name, stock_rows in grouped.items():
+        metrics = stock_rows[0][2]
+        sections.append((name, metrics, stock_rows))
+    return sections
+
+
+def executive_summary(rotation_alerts: List[str], stock_rows: List[List[str]], indicator_alerts: List[str]) -> str:
+    actions: List[str] = []
+    if rotation_alerts:
+        actions.append("有轮动候选需要人工复核；优先看强转弱/高切低机会。")
+        actions.append("Rotation candidates triggered; review strong-to-cheap switches first.")
+    if any("held strength" in row[1] or "持仓大涨" in row[1] for row in stock_rows):
+        actions.append("部分持仓进入强势检查区，更接近分批止盈，而不是追高。")
+        actions.append("Some held names moved into trim-review territory rather than chase territory.")
+    if any("deep pullback" in row[1] or "接近" in row[1] or "低位" in row[1] for row in stock_rows):
+        actions.append("有低位/深回撤信号，但仍需先确认基本面没有被破坏。")
+        actions.append("There are low-zone / deep-pullback signals, but the thesis still needs a clean fundamental check.")
+    if any("extreme-fear" in text.lower() or "极度恐慌" in text for text in indicator_alerts):
+        actions.append("市场情绪进入高价值观察区，可以提高低位研究优先级。")
+        actions.append("Sentiment moved into a high-value watch zone; raise priority on panic-entry research.")
+
+    if not actions:
+        actions = [
+            "今天没有新的高优先级动作，继续观察，不做情绪化交易。",
+            "No new high-priority action today; keep watching and avoid emotional trading.",
+        ]
+    return "\n".join(f"- {line}" for line in unique_lines(actions))
+
+
+def decision_signal_table(rows: List[List[str]], max_rows: int = 12) -> str:
+    ranked: List[List[str]] = []
+    priority_keys = [
+        "deep pullback",
+        "near",
+        "重估",
+        "re-rating",
+        "held strength",
+        "daily price-volume watch",
+        "套牢盘压力",
+    ]
+
+    def score(row: List[str]) -> int:
+        text = f"{row[1]} {row[3]} {row[4]}".lower()
+        for index, key in enumerate(priority_keys):
+            if key in text:
+                return index
+        return len(priority_keys)
+
+    ranked = sorted(rows, key=score)[:max_rows]
+    table_rows: List[List[str]] = []
+    for name, signal_type, metrics, analysis, decision in ranked:
+        table_rows.append(
+            [
+                name,
+                signal_type,
+                trim_text(metrics, 64),
+                trim_text(analysis, 90),
+                trim_text(decision, 90),
+            ]
+        )
+    return markdown_table(
+        ["标的 / Asset", "信号 / Signal", "数据 / Snapshot", "判断 / Read", "动作 / Action"],
+        table_rows,
+    )
+
+
+def portfolio_diagnosis(rows: List[List[str]]) -> str:
+    sections = grouped_stock_sections(rows)
+    blocks: List[str] = []
+    for name, metrics, stock_rows in sections:
+        role = "观察标的 / watchlist"
+        actions: List[str] = []
+        risks: List[str] = []
+        states: List[str] = []
+        for row in stock_rows:
+            signal_type = row[1].lower()
+            analysis = plain_text(row[3])
+            decision = plain_text(row[4])
+            if "held" in signal_type or "持仓" in signal_type:
+                role = "持仓 / held"
+            if "deep pullback" in signal_type or "低位" in signal_type:
+                states.append("低位研究区 / low-zone research")
+            elif "re-rating" in signal_type or "重估" in signal_type:
+                states.append("重估观察 / re-rating watch")
+            elif "strength" in signal_type or "强势" in signal_type:
+                states.append("强势检查区 / strength review")
+            else:
+                states.append(trim_text(row[1], 28))
+            actions.append(decision)
+            risks.append(analysis)
+        blocks.append(
+            "\n".join(
+                [
+                    f"**{name}**",
+                    f"- 角色 / Role: {role}",
+                    f"- 当前阶段 / Current phase: {'; '.join(unique_lines(states[:2]))}",
+                    f"- 关键信息 / Key read: {trim_text(' | '.join(unique_lines(risks[:2])), 180)}",
+                    f"- 建议动作 / Suggested action: {trim_text(' | '.join(unique_lines(actions[:2])), 180)}",
+                ]
+            )
+        )
+    return "\n\n".join(blocks)
+
+
+def market_temperature(indicator_alerts: List[str]) -> str:
+    if not indicator_alerts:
+        return "今天没有新的宏观/情绪硬信号。/ No new macro or sentiment hard trigger today."
+    return "\n\n".join(indicator_alerts[:4])
+
+
+def experience_reminders() -> str:
+    reminders = [
+        "好股票也要买在好价格；腾讯的历史交易已经验证，时机和价格同样重要。",
+        "Even a good company needs the right entry price; your Tencent history already proved timing matters.",
+        "浮盈不兑现会回吐；Oracle 的经历说明分批止盈比死拿更适合你。",
+        "Unrealized gains can evaporate; your Oracle experience supports staged profit-taking over passive hope.",
+        "持有时间不会自动纠错；OVH 说明错误标的或错误时点不能只靠等待解决。",
+        "Time does not fix every mistake; OVH showed that wrong picks or wrong timing cannot always be repaired by waiting.",
+    ]
+    return "\n".join(f"- {line}" for line in reminders)
+
+
 def explain_low_signal() -> str:
     return (
         "这不是直接买入指令，而是进入投研优先区：价格已经接近过去一段时间市场给过的低估/恐慌区。\n"
@@ -1574,7 +1714,8 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
 
     lines.append(f"CEO 投资简报 / CEO Investment Brief - {now}")
     lines.append("")
-    lines.append("汇报口径：只汇报可决策信号；同类信息合并，避免重复。/ Standard: decision-level signals only; similar items are grouped.")
+    lines.append("汇报口径：只汇报可决策信号；同类信息合并，避免重复。")
+    lines.append("Standard: decision-level signals only; similar information is grouped to avoid repetition.")
     lines.append("")
 
     global_rules = config.get("global_rules", {})
@@ -1669,38 +1810,55 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
                 ]
             ]
 
-    if rotation_alerts:
-        lines.append("一、最值得处理的调仓信号")
-        lines.append("----------------")
-        lines.append("\n\n".join(rotation_alerts))
+    has_any_signal = bool(rotation_alerts or stock_rows or stock_errors or indicator_alerts)
+
+    lines.append("一、今日结论 / Today's Conclusion")
+    lines.append("--------------------------------")
+    lines.append(executive_summary(rotation_alerts, stock_rows, indicator_alerts))
+    lines.append("")
+
+    if rotation_alerts or stock_rows:
+        lines.append("二、可执行信号 / Actionable Signals")
+        lines.append("----------------------------------")
+        if stock_rows:
+            lines.append(decision_signal_table(stock_rows))
+            lines.append("")
+        if rotation_alerts:
+            lines.append("重点调仓候选 / Rotation Candidates")
+            lines.append("\n\n".join(rotation_alerts[:3]))
         lines.append("")
 
     if stock_rows or stock_errors:
-        lines.append("二、个股分析与结论")
-        lines.append("----------------")
+        lines.append("三、持仓与观察诊断 / Portfolio & Watchlist Diagnosis")
+        lines.append("--------------------------------------------------")
         if stock_rows:
-            lines.append(stock_signal_blocks(stock_rows))
+            lines.append(portfolio_diagnosis(stock_rows))
         if stock_errors:
             lines.append("")
-            lines.append("数据异常")
+            lines.append("数据异常 / Data Exceptions")
             lines.append("\n\n".join(stock_errors))
         lines.append("")
 
     if indicator_alerts:
-        lines.append("三、市场背景")
-        lines.append("----------")
-        lines.append("\n\n".join(indicator_alerts))
+        lines.append("四、市场温度 / Market Temperature")
+        lines.append("--------------------------------")
+        lines.append(market_temperature(indicator_alerts))
         lines.append("")
 
     if influencer_rows:
-        influencer_section = "四" if indicator_alerts else "三"
-        lines.append(f"{influencer_section}、交易高手观点雷达")
-        lines.append("-------------------")
+        lines.append("五、高手雷达 / Influencer Radar")
+        lines.append("--------------------------------")
         lines.append(influencer_blocks(influencer_rows))
         lines.append("")
 
-    if not rotation_alerts and not stock_rows and not stock_errors and not indicator_alerts:
+    lines.append("六、经验提醒 / Experience Reminders")
+    lines.append("-----------------------------------")
+    lines.append(experience_reminders())
+    lines.append("")
+
+    if not has_any_signal:
         lines.append("结论：今天没有达到决策级别的新信号，继续观察，不做动作。")
+        lines.append("Conclusion: no decision-level signal today; keep watching and do not force a trade.")
 
     quality_report = fetch_quality_report()
     if quality_report:
