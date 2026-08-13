@@ -141,20 +141,42 @@ def fetch_quality_report() -> str:
     lines = [
         "数据获取质量 / Data Quality",
         "----------------------------",
-        f"结论：本次数据质量 {quality_status}。",
-        f"Summary: data quality this run was {quality_status}.",
-        f"请求汇总：共 {total_count} 个数据点，成功 {ok_count}，警告 {warn_count}，失败 {fail_count}。",
-        f"Fetch summary: {total_count} data points, {ok_count} ok, {warn_count} warnings, {fail_count} failures.",
-        "说明：这里只展开异常项。免费/公开接口可能有延迟、节假日缺口或个别 ticker 抓取失败；交易前仍应人工复核关键价格和新闻。",
-        "Note: only exceptions are listed. Public/free data can be delayed or missing around holidays; verify key prices and news manually before trading.",
+        markdown_table(
+            ["结论", "请求汇总", "交易前提醒"],
+            [
+                [
+                    quality_status,
+                    f"{total_count} total / {ok_count} ok / {warn_count} warnings / {fail_count} failed",
+                    "公开数据可能延迟；关键价格和新闻仍需人工复核。",
+                ]
+            ],
+        ),
     ]
     if fallback_items:
-        lines.append(f"新闻搜索提示：{len(fallback_items)} 次使用备用新闻源，属于降级成功，不影响行情数据。")
-        lines.append(f"News-search note: fallback source used {len(fallback_items)} times; this is degraded-but-successful, not a price-data failure.")
+        lines.append("")
+        lines.append(
+            markdown_table(
+                ["特殊情况", "影响"],
+                [[f"新闻搜索 {len(fallback_items)} 次使用备用源", "降级成功，不影响行情数据。"]],
+            )
+        )
     if qualities_to_show:
         lines.append("")
         lines.append("异常项 / Exceptions:")
-        lines.extend(quality_line(item) for item in qualities_to_show)
+        lines.append(
+            markdown_table(
+                ["标的", "状态", "来源", "提示"],
+                [
+                    [
+                        item.symbol,
+                        item.status,
+                        trim_text(item.source, 38),
+                        trim_text("; ".join(item.warnings or []) or item.error or "n/a", 90),
+                    ]
+                    for item in qualities_to_show[:10]
+                ],
+            )
+        )
     return "\n".join(lines)
 
 
@@ -925,21 +947,18 @@ def stock_signal_blocks(rows: List[List[str]]) -> str:
 
 
 def influencer_blocks(rows: List[List[str]]) -> str:
-    blocks = []
-    for row in rows:
-        name, background, core_view, latest, usage = row
-        blocks.append(
-            "\n".join(
-                [
-                    f"- {name}",
-                    f"  背景：{background}",
-                    f"  方法：{core_view}",
-                    f"  最新：\n{indent_text(latest, 4)}",
-                    f"  用法：{usage}",
-                ]
-            )
+    table_rows = []
+    for name, background, core_view, latest, usage in rows:
+        table_rows.append(
+            [
+                name,
+                trim_text(background, 54),
+                trim_text(core_view, 54),
+                trim_text(plain_text(latest), 90),
+                trim_text(usage, 42),
+            ]
         )
-    return "\n\n".join(blocks)
+    return markdown_table(["人物", "背景", "方法", "最新信号", "用法"], table_rows)
 
 
 def unique_lines(items: List[str]) -> List[str]:
@@ -967,26 +986,19 @@ def grouped_stock_sections(rows: List[List[str]]) -> List[Tuple[str, str, List[L
 
 
 def executive_summary(rotation_alerts: List[str], stock_rows: List[List[str]], indicator_alerts: List[str]) -> str:
-    actions: List[str] = []
+    rows: List[List[str]] = []
     if rotation_alerts:
-        actions.append("有轮动候选需要人工复核；优先看强转弱/高切低机会。")
-        actions.append("Rotation candidates triggered; review strong-to-cheap switches first.")
+        rows.append(["调仓", "有轮动候选触发", "只进入人工复核，不直接下单。"])
     if any("held strength" in row[1] or "持仓大涨" in row[1] for row in stock_rows):
-        actions.append("部分持仓进入强势检查区，更接近分批止盈，而不是追高。")
-        actions.append("Some held names moved into trim-review territory rather than chase territory.")
+        rows.append(["持仓", "部分持仓进入强势检查区", "优先考虑分批止盈，而不是追高。"])
     if any("deep pullback" in row[1] or "接近" in row[1] or "低位" in row[1] for row in stock_rows):
-        actions.append("有低位/深回撤信号，但仍需先确认基本面没有被破坏。")
-        actions.append("There are low-zone / deep-pullback signals, but the thesis still needs a clean fundamental check.")
+        rows.append(["机会", "出现低位/深回撤信号", "先排除基本面破坏，再考虑分批。"])
     if any("extreme-fear" in text.lower() or "极度恐慌" in text for text in indicator_alerts):
-        actions.append("市场情绪进入高价值观察区，可以提高低位研究优先级。")
-        actions.append("Sentiment moved into a high-value watch zone; raise priority on panic-entry research.")
+        rows.append(["情绪", "市场进入极度恐慌观察区", "提高低位研究优先级。"])
 
-    if not actions:
-        actions = [
-            "今天没有新的高优先级动作，继续观察，不做情绪化交易。",
-            "No new high-priority action today; keep watching and avoid emotional trading.",
-        ]
-    return "\n".join(f"- {line}" for line in unique_lines(actions))
+    if not rows:
+        rows = [["结论", "今天没有新的高优先级动作", "继续观察，不做情绪化交易。"]]
+    return markdown_table(["类别", "核心判断", "动作"], rows)
 
 
 def row_priority_score(row: List[str]) -> int:
@@ -1022,10 +1034,10 @@ def decision_signal_table(rows: List[List[str]], max_rows: int = 6) -> str:
         table_rows.append(
             [
                 name,
-                trim_text(signal_type, 30),
-                trim_text(metrics, 48),
-                trim_text(analysis, 68),
-                trim_text(decision, 68),
+                trim_text(signal_type, 28),
+                trim_text(metrics, 58),
+                trim_text(plain_text(analysis), 82),
+                trim_text(plain_text(decision), 82),
             ]
         )
     return markdown_table(
@@ -1035,20 +1047,7 @@ def decision_signal_table(rows: List[List[str]], max_rows: int = 6) -> str:
 
 
 def concise_signal_briefs(rows: List[List[str]], max_rows: int = 4) -> str:
-    briefs: List[str] = []
-    for name, signal_type, metrics, analysis, decision in top_signal_rows(rows, max_rows=max_rows):
-        briefs.append(
-            "\n".join(
-                [
-                    f"**{name}**",
-                    f"- {trim_text(signal_type, 36)}",
-                    f"- 数据 / Snapshot: {trim_text(metrics, 72)}",
-                    f"- 判断 / Read: {trim_text(plain_text(analysis), 108)}",
-                    f"- 动作 / Action: {trim_text(plain_text(decision), 108)}",
-                ]
-            )
-        )
-    return "\n\n".join(briefs)
+    return decision_signal_table(rows, max_rows=max_rows)
 
 
 def portfolio_diagnosis(rows: List[List[str]]) -> str:
@@ -1091,12 +1090,13 @@ def portfolio_diagnosis(rows: List[List[str]]) -> str:
 
 def tight_portfolio_diagnosis(rows: List[List[str]], max_names: int = 6) -> str:
     sections = grouped_stock_sections(rows)[:max_names]
-    lines: List[str] = []
+    table_rows: List[List[str]] = []
     for name, metrics, stock_rows in sections:
+        signal = trim_text(stock_rows[0][1], 26)
         read = trim_text(plain_text(stock_rows[0][3]), 96)
         action = trim_text(plain_text(stock_rows[0][4]), 96)
-        lines.append(f"- **{name}**: {read} 动作：{action}")
-    return "\n".join(lines)
+        table_rows.append([name, signal, trim_text(metrics, 52), read, action])
+    return markdown_table(["标的", "阶段", "数据", "判断", "动作"], table_rows)
 
 
 def market_temperature(indicator_alerts: List[str]) -> str:
@@ -1378,7 +1378,7 @@ def compact_geopolitical_themes(config: Dict[str, Any], quote_cache: Dict[str, Q
         return ""
 
     evaluated.sort(reverse=True)
-    lines: List[str] = []
+    table_rows: List[List[str]] = []
     for score, _, label, text in evaluated[:max_active]:
         picked: Dict[str, str] = {}
         for raw in text.splitlines():
@@ -1386,23 +1386,22 @@ def compact_geopolitical_themes(config: Dict[str, Any], quote_cache: Dict[str, Q
                 continue
             key, value = raw.split(": ", 1)
             picked[key] = value
-        lines.append(
-            "\n".join(
-                [
-                    f"**{label} | {score}/5**",
-                    f"- 状态 / State: {trim_text(picked.get('状态 / State', ''), 44)}",
-                    f"- 市场在交易 / Market focus: {trim_text(picked.get('市场在交易什么 / What the market is trading', ''), 120)}",
-                    f"- 持续窗口 / Duration: {trim_text(picked.get('预计持续 / Expected duration', ''), 42)}",
-                    f"- 失效观察 / Watch: {trim_text(picked.get('变化观察点 / Watch for change', ''), 120)}",
-                ]
-            )
+        table_rows.append(
+            [
+                label,
+                f"{score}/5",
+                trim_text(picked.get("状态 / State", ""), 32),
+                trim_text(picked.get("市场在交易什么 / What the market is trading", ""), 90),
+                trim_text(picked.get("预计持续 / Expected duration", ""), 32),
+                trim_text(picked.get("变化观察点 / Watch for change", ""), 90),
+            ]
         )
-    return "\n\n".join(lines)
+    return markdown_table(["主线", "评分", "状态", "市场在交易", "持续窗口", "失效观察"], table_rows)
 
 
 def not_expanded_today(config: Dict[str, Any], quote_cache: Dict[str, Quote], expanded_rows: List[List[str]]) -> str:
     expanded_names = {row[0].split(" (")[0] for row in expanded_rows}
-    omitted: List[str] = []
+    buckets: Dict[str, List[str]] = {}
     for stock in [item for item in config.get("stocks", []) if not item.get("disabled")]:
         name = stock.get("name", "")
         if name in expanded_names or stock.get("position", 0) > 0:
@@ -1416,24 +1415,33 @@ def not_expanded_today(config: Dict[str, Any], quote_cache: Dict[str, Quote], ex
         if ratio is None:
             continue
         if ratio >= 0.65:
-            omitted.append(f"- {name}: {position_label}，离一年低位已经不近，今天没有新催化，不单独展开。")
+            buckets.setdefault("偏高 / high-zone", []).append(f"{name} ({position_label})")
         elif ratio >= 0.35:
-            omitted.append(f"- {name}: {position_label}，还在中间区间，没有新的亮点或警示点。")
-    if not omitted:
+            buckets.setdefault("中位 / mid-zone", []).append(f"{name} ({position_label})")
+    if not buckets:
         return ""
-    return "\n".join(omitted[:12])
+    table_rows = []
+    for bucket, names in buckets.items():
+        table_rows.append(
+            [
+                bucket,
+                str(len(names)),
+                trim_text(", ".join(names[:8]), 140),
+                "没有新的亮点或警示；不占用正文篇幅。",
+            ]
+        )
+    return markdown_table(["位置", "数量", "代表标的", "处理"], table_rows)
 
 
 def experience_reminders() -> str:
-    reminders = [
-        "好股票也要买在好价格；腾讯的历史交易已经验证，时机和价格同样重要。",
-        "Even a good company needs the right entry price; your Tencent history already proved timing matters.",
-        "浮盈不兑现会回吐；Oracle 的经历说明分批止盈比死拿更适合你。",
-        "Unrealized gains can evaporate; your Oracle experience supports staged profit-taking over passive hope.",
-        "持有时间不会自动纠错；OVH 说明错误标的或错误时点不能只靠等待解决。",
-        "Time does not fix every mistake; OVH showed that wrong picks or wrong timing cannot always be repaired by waiting.",
-    ]
-    return "\n".join(f"- {line}" for line in reminders)
+    return markdown_table(
+        ["经验来源", "提醒", "动作含义"],
+        [
+            ["Tencent", "好公司也要买在好价格。", "等待低位或恐慌，不在情绪高点追。"],
+            ["Oracle", "浮盈不兑现会回吐。", "强反弹后分批止盈，不把盈利交还市场。"],
+            ["OVH", "持有时间不会自动纠错。", "基本面坏了就降级，不靠等待修复错误。"],
+        ],
+    )
 
 
 def should_include_influencer_section(rotation_alerts: List[str], stock_rows: List[List[str]]) -> bool:
@@ -1990,60 +1998,55 @@ def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote])
         if buy_reasons:
             buy_candidates.append((stock, quote, buy_reasons))
 
-    pair_blocks: List[str] = []
+    pair_rows: List[List[str]] = []
     max_pairs = int(engine.get("max_pairs_per_email", 5))
     for from_stock, from_quote, from_reasons in sell_candidates:
         for to_stock, to_quote, to_reasons in buy_candidates:
             if from_stock["ticker"] == to_stock["ticker"]:
                 continue
-            if len(pair_blocks) >= max_pairs:
+            if len(pair_rows) >= max_pairs:
                 break
             ROTATION_TARGET_TICKERS.add(to_stock["ticker"])
-            pair_index = len(pair_blocks) + 1
+            pair_index = len(pair_rows) + 1
             ROTATION_PAIR_CONTEXT.append(
                 (from_stock["name"], from_stock["ticker"], to_stock["name"], to_stock["ticker"])
             )
             target_is_held = "持仓加仓 / held add" if to_stock.get("position", 0) > 0 else "观察买入 / watchlist buy"
-            pair_blocks.append(
-                "\n".join(
-                    [
-                        f"{pair_index}. {from_stock['name']} -> {to_stock['name']} ({target_is_held})",
-                        f"   目标数据：{quote_metrics_inline(to_quote)}",
-                        "   机会理由：",
-                        indent_text(short_reasons(to_reasons)),
-                        "   红旗核查：",
-                        indent_text(red_flag_news_check(to_stock)),
-                        "   大V观点：",
-                        indent_text(influencer_rotation_check(from_stock, to_stock, pair_index)),
-                        "   建议动作：先人工复核；若基本面没破，只考虑小比例/分批。",
-                    ]
-                )
+            pair_rows.append(
+                [
+                    f"{from_stock['name']} -> {to_stock['name']}",
+                    target_is_held,
+                    trim_text(quote_metrics_inline(to_quote), 58),
+                    trim_text(plain_text("; ".join(to_reasons)), 90),
+                    trim_text(plain_text(red_flag_news_check(to_stock)), 90),
+                    trim_text(plain_text(influencer_rotation_check(from_stock, to_stock, pair_index)), 70),
+                    "人工复核；基本面没破才小比例/分批。",
+                ]
             )
-        if len(pair_blocks) >= max_pairs:
+        if len(pair_rows) >= max_pairs:
             break
 
-    if not pair_blocks:
+    if not pair_rows:
         return []
 
-    funding_blocks = [
-        f"- {stock['name']} ({stock['ticker']}): {quote_metrics_inline(quote)}\n"
-        f"  理由：{plain_text('; '.join(reasons))}"
+    funding_rows = [
+        [
+            f"{stock['name']} ({stock['ticker']})",
+            trim_text(quote_metrics_inline(quote), 58),
+            trim_text(plain_text("; ".join(reasons)), 90),
+        ]
         for stock, quote, reasons in sell_candidates
     ]
     lines = [
-        f"结论：出现 {len(pair_blocks)} 个轮动候选。它们是研究清单，不是同时买入指令。",
-        f"Conclusion: {len(pair_blocks)} rotation candidates were triggered. This is a research list, not a trade order.",
+        f"结论：出现 {len(pair_rows)} 个轮动候选；这是研究清单，不是买入指令。",
         "",
-        "资金来源候选 / Possible funding source:",
-        "\n".join(funding_blocks),
+        "资金来源 / Funding source",
+        markdown_table(["标的", "数据", "卖出理由"], funding_rows),
         "",
-        "候选轮动 / Rotation candidates:",
-        "\n\n".join(pair_blocks),
+        "候选去向 / Rotation candidates",
+        markdown_table(["组合", "类型", "目标数据", "机会", "红旗", "大V", "动作"], pair_rows),
         "",
-        "红旗核查口径：只对触发轮动的目标标的搜索；查询使用公司名 + ticker + 红旗关键词。结果是证据提示，不是自动定罪；未发现直接匹配不等于风险不存在。",
-        "大V核查口径：只搜索配置名单里的公开信息；未发现不等于他们没有观点，可能只是公开搜索源未覆盖。",
-        "",
-        "口径解释：成交量是市场参与热度；下跌放量说明资金正在重新定价，要先确认是恐慌错杀还是基本面坏了。",
+        "口径：红旗和大V只做证据提示；未发现不等于风险不存在。",
     ]
     return ["\n".join(lines)]
 
@@ -2077,25 +2080,20 @@ def check_rotation_signal(signal: Dict[str, Any]) -> List[str]:
         return alerts
 
     red_flags = guardrail.get("red_flags", [])
-    red_flag_text = "\n".join(f"- {flag}" for flag in red_flags)
     alerts.append(
-        bilingual(
-            (
-                f"触发调仓观察：{signal['from_name']} → {signal['to_name']}。\n"
-                f"建议动作：{signal.get('action', 'Review this rotation manually.')}\n"
-                f"{signal['from_name']} 出现可卖强势；{signal['to_name']} 接近低位/大跌机会。\n"
-                f"执行前必须人工确认 {signal['to_name']} 基本面支撑仍在，尤其排除以下红旗：\n{red_flag_text}"
-            ),
-            (
-                f"Rotation watch triggered: {signal['from_name']} → {signal['to_name']}.\n"
-                f"Suggested action: {signal.get('action', 'Review this rotation manually.')}\n"
-                f"{signal['from_name']} shows sellable strength; {signal['to_name']} is near a low / selloff opportunity.\n"
-                f"Before acting, manually confirm {signal['to_name']}'s fundamental support is still intact, especially excluding these red flags:\n{red_flag_text}"
-            ),
+        markdown_table(
+            ["组合", "资金来源", "目标", "红旗", "动作"],
+            [
+                [
+                    f"{signal['from_name']} -> {signal['to_name']}",
+                    trim_text(quote_snapshot(from_quote), 70),
+                    trim_text(quote_snapshot(to_quote), 70),
+                    trim_text("; ".join(red_flags) or "无特别红旗", 90),
+                    trim_text(signal.get("action", "Review this rotation manually."), 90),
+                ]
+            ],
         )
     )
-    alerts.append(f"{signal['from_name']} ({signal['from_ticker']})\n{quote_snapshot(from_quote)}")
-    alerts.append(f"{signal['to_name']} ({signal['to_ticker']})\n{quote_snapshot(to_quote)}")
     return alerts
 
 
@@ -2223,15 +2221,21 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
             lines.append("\n\n".join(rotation_alerts[:2]))
         lines.append("")
 
-    if stock_rows or stock_errors:
-        lines.append("三、组合诊断 / Portfolio Diagnosis")
-        lines.append("-----------------------------------")
-        if stock_rows:
-            lines.append(tight_portfolio_diagnosis(top_signal_rows(stock_rows, max_rows=6)))
+    supplemental_stock_rows = top_signal_rows(stock_rows, max_rows=10)[4:] if stock_rows else []
+    if supplemental_stock_rows or stock_errors:
+        lines.append("三、补充观察 / Additional Watch")
+        lines.append("-------------------------------")
+        if supplemental_stock_rows:
+            lines.append(tight_portfolio_diagnosis(supplemental_stock_rows, max_names=6))
         if stock_errors:
             lines.append("")
             lines.append("数据异常 / Data Exceptions")
-            lines.append("\n\n".join(stock_errors))
+            lines.append(
+                markdown_table(
+                    ["事项", "说明"],
+                    [["数据异常", trim_text(plain_text(error), 120)] for error in stock_errors[:6]],
+                )
+            )
         lines.append("")
 
     geo_section = compact_geopolitical_themes(config, quote_cache)
@@ -2243,7 +2247,11 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
             lines.append(geo_section)
             lines.append("")
         if indicator_alerts:
-            lines.append(compact_market_temperature(indicator_alerts))
+            indicator_rows = [
+                [trim_text(plain_text(alert).split()[0], 36), trim_text(plain_text(alert), 150)]
+                for alert in indicator_alerts[:3]
+            ]
+            lines.append(markdown_table(["指标", "核心信号"], indicator_rows))
         lines.append("")
 
     omitted_section = not_expanded_today(config, quote_cache, stock_rows)
