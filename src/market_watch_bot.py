@@ -1550,6 +1550,277 @@ def framework_readout(stock: Dict[str, Any], quote: Quote, reasons: Optional[Lis
     )
 
 
+def flow_readout(quote: Quote) -> str:
+    """Classify observable price-volume behavior without pretending it proves fundamentals."""
+    ratio = volume_ratio(quote)
+    if ratio is None:
+        return "量价证据不足：只知道价格变化，无法判断资金是否确认。"
+    if quote.daily_pct <= -3 and ratio >= 1.8:
+        return f"卖压仍强：下跌 {quote.daily_pct:+.1f}%，量 {ratio:.1f}x；先等卖盘衰竭。"
+    if quote.daily_pct < 0 and ratio <= 0.8:
+        return f"卖压可能减弱：下跌但量仅 {ratio:.1f}x；需等不创新低确认。"
+    if quote.daily_pct > 1 and ratio >= 1.5:
+        return f"买方开始确认：上涨且量 {ratio:.1f}x；仍需后续站稳验证。"
+    return f"资金流未确认：今日 {quote.daily_pct:+.1f}%，量 {ratio:.1f}x；不单凭此下单。"
+
+
+def default_capital_profile(stock: Dict[str, Any]) -> str:
+    theme = theme_label(stock)
+    if theme == "AI / cloud infrastructure":
+        return "picks_and_shovels"
+    if theme == "China internet / consumption recovery":
+        return "cash_compounder"
+    if "bank" in str(stock.get("notes", "")).lower() or stock.get("ticker") in {"BNP.PA", "GLE.PA", "UBS", "BAC"}:
+        return "bank_credit_cycle"
+    return "cyclical_repair"
+
+
+def research_profile_for_stock(stock: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the business-model-specific research lens for a stock, not a generic sector label."""
+    research = config.get("advisor_research", {})
+    for profile_name, profile in research.get("profiles", {}).items():
+        if stock.get("ticker") in profile.get("tickers", []):
+            result = dict(profile)
+            result["name"] = profile_name
+            result.update(stock.get("advisor_profile", {}))
+            return result
+
+    framework = config.get("trading_framework", {})
+    profile_name = stock.get("advisor_profile", {}).get("capital_profile", default_capital_profile(stock))
+    result = {
+        "name": profile_name,
+        "mispricing": "未配置特定错误定价假设；先明确市场可能错在哪里，再考虑交易。",
+        "fundamentals": "核对前瞻收入、EPS、FCF、利润率、订单和市场份额。",
+        "capital": framework.get("default_capital_profiles", {}).get(profile_name, "人工核对CapEx、债务、利息和稀释。"),
+        "credit": "核对利率、再融资、评级、债券利差及现金流韧性。",
+        "valuation": "一年区间位置不是内在价值；用前瞻盈利和FCF验证。",
+        "catalysts": framework.get("default_catalysts", []),
+    }
+    result.update(stock.get("advisor_profile", {}))
+    return result
+
+
+def joined_profile_items(value: Any, limit: int = 3) -> str:
+    if isinstance(value, list):
+        return "；".join(str(item) for item in value[:limit])
+    return str(value or "未配置；没有可验证催化剂时，不因低位而买入。")
+
+
+def investment_memo_table(stock: Dict[str, Any], quote: Quote, config: Dict[str, Any]) -> str:
+    """Produce the fixed eight-gate review only for a real decision-level signal."""
+    profile = research_profile_for_stock(stock, config)
+    position_label = "已有持仓" if stock.get("position", 0) > 0 else "观察名单，首次仓位应小"
+    role = stock.get("rotation", {}).get("role", "watchlist")
+    if role in {"aggressive", "speculative"}:
+        position_label += "；高波动/凸性仓，不能让单一逻辑主导账户。"
+    valuation_read = profile.get("valuation_question", profile.get("valuation"))
+    catalyst_read = joined_profile_items(profile.get("catalysts"))
+    red_flag_read = red_flag_news_check(stock)
+    invalidation = first_guardrails(stock, limit=3)
+    rows = [
+        ["基本面 / Fundamentals", trim_text(profile.get("mispricing", "") + " " + profile.get("fundamentals", ""), 175), "自动红旗筛查：" + trim_text(plain_text(red_flag_read), 90)],
+        ["资本结构 / Capital", trim_text(profile.get("capital", ""), 175), "增长必须覆盖新增CapEx、融资成本和潜在稀释；看增量ROIC，不只看收入。"],
+        ["资金流 / Flow", flow_readout(quote), "寻找坏消息不再创新低、二次回踩缩量，或上涨日放量。"],
+        ["信用 / Credit", trim_text(profile.get("credit", ""), 175), "信用市场通常比股价更早暴露风险；本 bot 不把未发现新闻误判为信用安全。"],
+        ["估值 / Valuation", f"{one_year_position_label(quote)}。{valuation_read}", "技术低位不等于内在价值低；避免只看过去PE。"],
+        ["催化剂 / Catalyst", trim_text(catalyst_read, 145), "至少有一个可观察的验证节点，才从研究名单升级为交易候选。"],
+        ["失效条件 / Invalidation", trim_text(plain_text(invalidation), 145), "任何一项被事实证伪，停止摊低成本，重新评估或退出。"],
+        ["仓位 / Position", position_label, "按预期收益 x 概率相对于最大下跌决定仓位；核心仓、凸性仓和现金分开。"],
+    ]
+    return markdown_table(["八栏 / Gate", "当前判断 / Read", "CEO复核 / Required decision"], rows)
+
+
+def decision_memos_for_rows(
+    rows: List[List[str]], config: Dict[str, Any], quote_cache: Dict[str, Quote], max_names: int = 2
+) -> str:
+    decision_terms = ("deep pullback", "接近", "低位", "re-rating", "重估", "held strength", "持仓大涨", "5d strength", "连续走强")
+    selected: List[Dict[str, Any]] = []
+    for row in top_signal_rows(rows, max_rows=12):
+        row_text = f"{row[1]} {row[3]}".lower()
+        if not any(term in row_text for term in decision_terms):
+            continue
+        matched = next((stock for stock in config.get("stocks", []) if stock.get("ticker") in row[0]), None)
+        if matched and matched not in selected:
+            selected.append(matched)
+        if len(selected) >= max_names:
+            break
+
+    # A rotation target can be intentionally omitted from routine stock rows.
+    # It still deserves the same pre-trade review when the engine proposes funding it.
+    if len(selected) < max_names:
+        for stock in config.get("stocks", []):
+            if stock.get("ticker") in ROTATION_TARGET_TICKERS and stock not in selected:
+                selected.append(stock)
+            if len(selected) >= max_names:
+                break
+
+    if not selected:
+        return ""
+    sections = []
+    for stock in selected:
+        quote = get_quote(stock["ticker"], quote_cache)
+        sections.append(f"**{stock['name']} ({stock['ticker']})**\n{investment_memo_table(stock, quote, config)}")
+    return "\n\n".join(sections)
+
+
+def indicator_quote(config: Dict[str, Any], quote_cache: Dict[str, Quote], name: str) -> Optional[Quote]:
+    indicator = next((item for item in config.get("market_indicators", []) if item.get("name") == name), None)
+    if not indicator:
+        return None
+    try:
+        return get_quote(indicator["ticker"], quote_cache)
+    except Exception:
+        return None
+
+
+def portfolio_regime_table(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> str:
+    """Summarize cross-asset regime signals without claiming that market proxies are causation."""
+    tnx = indicator_quote(config, quote_cache, "US 10Y Yield")
+    vix = indicator_quote(config, quote_cache, "VIX")
+    hyg = indicator_quote(config, quote_cache, "High Yield Credit ETF")
+    lqd = indicator_quote(config, quote_cache, "Investment Grade Credit ETF")
+    qqq = indicator_quote(config, quote_cache, "Nasdaq 100 ETF")
+    smh = indicator_quote(config, quote_cache, "Semiconductor ETF")
+    hsi = indicator_quote(config, quote_cache, "Hang Seng Index")
+
+    rows: List[List[str]] = []
+    if tnx and vix:
+        rate_state = "估值压力偏高" if tnx.last >= 45 or vix.last >= 25 else "未见极端压力"
+        rows.append(["利率/风险偏好", rate_state, f"10Y {tnx.last / 10:.2f}%；VIX {vix.last:.1f}", "高利率首先压制长久期、高CapEx和高估值资产；不是对单股的买卖指令。"])
+    if hyg and lqd and hyg.five_day_pct is not None and lqd.five_day_pct is not None:
+        spread = hyg.five_day_pct - lqd.five_day_pct
+        credit_state = "信用风险偏紧" if hyg.five_day_pct <= -2.0 and spread <= -1.0 else "信用代理未见明显恶化"
+        rows.append(["信用条件", credit_state, f"HYG 5日 {hyg.five_day_pct:+.1f}%；相对LQD {spread:+.1f}pct", "HYG弱于LQD说明高收益信用承压；它是市场代理，不替代公司评级或债券利差。"])
+    if qqq and smh and qqq.five_day_pct is not None and smh.five_day_pct is not None:
+        ai_state = "AI硬件风险偏好走弱" if smh.five_day_pct <= -5.0 else "AI风险偏好未见急剧撤退"
+        rows.append(["AI资本周期", ai_state, f"QQQ 5日 {qqq.five_day_pct:+.1f}%；SMH {smh.five_day_pct:+.1f}", "价格代理只反映资金偏好；真实资本周期仍需财报中的客户CapEx、订单和利用率验证。"])
+    if hsi and hsi.five_day_pct is not None:
+        china_state = "中概风险偏好偏弱" if hsi.five_day_pct <= -3.0 else "中概风险偏好稳定/改善"
+        rows.append(["中国风险溢价", china_state, f"恒指 5日 {hsi.five_day_pct:+.1f}%", "中国平台重估还取决于消费、竞争、政策和跨境风险，不只看指数。"])
+    if not rows:
+        return ""
+    return markdown_table(["主线", "当前状态", "市场代理", "投资含义"], rows)
+
+
+def trailing_return(quote: Quote, trading_days: int) -> Optional[float]:
+    try:
+        close = quote.close_history.dropna()
+        if len(close) <= trading_days:
+            return None
+        return (float(close.iloc[-1]) / float(close.iloc[-trading_days - 1]) - 1) * 100
+    except Exception:
+        return None
+
+
+def market_rotation_scan(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> Tuple[str, bool]:
+    """Find early research candidates where sector flow and stock price location have not fully detached."""
+    settings = config.get("market_scan", {})
+    if not settings.get("enabled", False):
+        return "", False
+
+    try:
+        benchmark = get_quote(settings.get("benchmark_ticker", "SPY"), quote_cache)
+    except Exception as exc:
+        return f"赛道扫描不可用 / Market scan unavailable: {exc}", False
+
+    benchmark_20d = trailing_return(benchmark, 20)
+    if benchmark_20d is None:
+        return "赛道扫描数据不足 / Market scan lacks benchmark history.", False
+
+    confirmed_threshold = float(settings.get("min_relative_strength_20d_pct", 1.5))
+    early_threshold = float(settings.get("early_relative_strength_20d_pct", 0.5))
+    max_position = float(settings.get("candidate_max_1y_position", 0.65))
+    min_5d = float(settings.get("candidate_min_5d_pct", -2.0))
+    theme_rows: List[Tuple[float, List[str]]] = []
+    candidate_rows: List[List[str]] = []
+
+    for track in settings.get("tracks", []):
+        try:
+            proxy = get_quote(track["proxy_ticker"], quote_cache)
+            confirmer = get_quote(track["confirmer_ticker"], quote_cache)
+        except Exception:
+            continue
+        proxy_20d = trailing_return(proxy, 20)
+        confirmer_20d = trailing_return(confirmer, 20)
+        if proxy_20d is None or confirmer_20d is None:
+            continue
+        relative = proxy_20d - benchmark_20d
+        confirmer_relative = confirmer_20d - benchmark_20d
+        confirmed = relative >= confirmed_threshold and confirmer_relative >= -1.0
+        emerging = relative >= early_threshold and confirmer_relative >= -2.0
+        if confirmed:
+            stage = "资金确认 / confirmed flow"
+        elif emerging:
+            stage = "早期轮动 / early rotation"
+        else:
+            stage = "未确认 / not confirmed"
+
+        eligible: List[Tuple[str, Quote, float]] = []
+        for ticker in track.get("candidates", []):
+            try:
+                candidate = get_quote(ticker, quote_cache)
+            except Exception:
+                continue
+            price_position = one_year_position_ratio(candidate)
+            if price_position is None or candidate.five_day_pct is None:
+                continue
+            # A leader can be strong while a candidate is still in a normal valuation/range zone.
+            if emerging and price_position <= max_position and candidate.five_day_pct >= min_5d:
+                eligible.append((ticker, candidate, price_position))
+
+        opportunity = "无合格低位候选 / no early candidate"
+        if eligible:
+            opportunity = f"{len(eligible)} 个未过热候选 / {len(eligible)} non-extended candidate(s)"
+        theme_rows.append(
+            (
+                relative,
+                [
+                    track["name"],
+                    stage,
+                    f"20日相对SPY {relative:+.1f}pct；确认器 {confirmer_relative:+.1f}pct",
+                    opportunity,
+                ],
+            )
+        )
+        for ticker, candidate, price_position in eligible:
+            readiness = "可研究，不追买" if confirmed else "提前研究，等待资金确认"
+            candidate_rows.append(
+                [
+                    track["name"],
+                    ticker,
+                    f"{candidate.last:.2f}；5日 {candidate.five_day_pct:+.1f}%；一年位置 {price_position:.0%}",
+                    readiness,
+                    trim_text(track.get("required_checks", "财报、估值和红旗核查"), 105),
+                ]
+            )
+
+    if not theme_rows:
+        return "赛道扫描暂无足够数据 / Market scan has insufficient data.", False
+
+    max_themes = int(settings.get("max_themes_in_email", 3))
+    theme_rows.sort(key=lambda item: item[0], reverse=True)
+    lines = [
+        "原则：赛道强势不等于立即买入。只有资金开始流入、候选未明显过热、且后续基本面核查通过，才进入研究优先级。",
+        markdown_table(
+            ["赛道 / Theme", "阶段 / Stage", "资金证据 / Flow", "低位候选 / Early candidates"],
+            [row for _, row in theme_rows[:max_themes]],
+        ),
+    ]
+    if candidate_rows:
+        lines.extend(
+            [
+                "",
+                markdown_table(
+                    ["赛道", "候选", "价格位置", "结论", "下单前核对"],
+                    candidate_rows[:6],
+                ),
+            ]
+        )
+    else:
+        lines.append("结论：市场可能正在交易部分新赛道，但没有同时满足‘相对走强 + 未过热’的候选；不为了轮动而轮动。")
+    return "\n".join(lines), bool(candidate_rows)
+
+
 def history_window_min(quote: Quote, years: int) -> Optional[float]:
     trading_days = 252 * years
     close = quote.close_history.dropna()
@@ -2145,6 +2416,16 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
                 )
             )
 
+    market_scan_section = ""
+    try:
+        market_scan_section, market_scan_triggered = market_rotation_scan(config, quote_cache)
+        triggered = triggered or market_scan_triggered
+    except Exception as exc:
+        market_scan_section = bilingual(
+            f"赛道轮动扫描失败：{exc}",
+            f"Market rotation scan failed: {exc}",
+        )
+
     stock_rows: List[List[str]] = []
     stock_errors: List[str] = []
     for stock in [item for item in config.get("stocks", []) if not item.get("disabled")]:
@@ -2203,7 +2484,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
                 ]
             ]
 
-    has_any_signal = bool(rotation_alerts or stock_rows or stock_errors or indicator_alerts)
+    has_any_signal = bool(rotation_alerts or stock_rows or stock_errors or indicator_alerts or market_scan_section)
 
     lines.append("一、今日结论 / Today's Conclusion")
     lines.append("--------------------------------")
@@ -2221,9 +2502,25 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
             lines.append("\n\n".join(rotation_alerts[:2]))
         lines.append("")
 
+    if market_scan_section:
+        lines.append("三、赛道轮动扫描 / Market Rotation Scan")
+        lines.append("------------------------------------------")
+        lines.append(market_scan_section)
+        lines.append("")
+
+    decision_memos = decision_memos_for_rows(stock_rows, config, quote_cache)
+    if decision_memos:
+        lines.append("四、交易前八栏复核 / Pre-Trade Eight-Gate Review")
+        lines.append("---------------------------------------------------")
+        lines.append("只对真正触发的机会/强势信号展开。自动数据用于筛查，不替代财报、估值与信用人工核验。")
+        lines.append("Expanded only for decision-level signals. Automated data screens for risk; it does not replace earnings, valuation, or credit verification.")
+        lines.append("")
+        lines.append(decision_memos)
+        lines.append("")
+
     supplemental_stock_rows = top_signal_rows(stock_rows, max_rows=10)[4:] if stock_rows else []
     if supplemental_stock_rows or stock_errors:
-        lines.append("三、补充观察 / Additional Watch")
+        lines.append("五、补充观察 / Additional Watch")
         lines.append("-------------------------------")
         if supplemental_stock_rows:
             lines.append(tight_portfolio_diagnosis(supplemental_stock_rows, max_names=6))
@@ -2239,10 +2536,14 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append("")
 
     geo_section = compact_geopolitical_themes(config, quote_cache)
+    regime_section = portfolio_regime_table(config, quote_cache) if (rotation_alerts or stock_rows) else ""
 
-    if indicator_alerts or geo_section:
-        lines.append("四、市场温度 / Market Temperature")
+    if indicator_alerts or geo_section or regime_section:
+        lines.append("六、市场温度 / Market Temperature")
         lines.append("--------------------------------")
+        if regime_section:
+            lines.append(regime_section)
+            lines.append("")
         if geo_section:
             lines.append(geo_section)
             lines.append("")
@@ -2256,18 +2557,18 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
 
     omitted_section = not_expanded_today(config, quote_cache, stock_rows)
     if omitted_section:
-        lines.append("五、今天不单独展开 / Not Expanded Today")
+        lines.append("七、今天不单独展开 / Not Expanded Today")
         lines.append("-------------------------------------")
         lines.append(omitted_section)
         lines.append("")
 
     if influencer_rows:
-        lines.append("六、高手雷达 / Influencer Radar")
+        lines.append("八、高手雷达 / Influencer Radar")
         lines.append("--------------------------------")
         lines.append(influencer_blocks(influencer_rows[:3]))
         lines.append("")
 
-    lines.append("七、经验提醒 / Experience Reminders")
+    lines.append("九、经验提醒 / Experience Reminders")
     lines.append("-----------------------------------")
     lines.append(experience_reminders())
     lines.append("")

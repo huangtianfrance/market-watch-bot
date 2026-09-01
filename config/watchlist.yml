@@ -66,12 +66,170 @@ influencer_watch:
 
 trading_framework:
   enabled: true
-  title: "Small-account doubling framework"
-  core_principle: "小资金想翻倍，不能只靠低位抄底；要在市场恐慌时买入基本面没死、并且未来可能被重新定价的资产，然后用纪律避免把一次判断错误变成永久亏损。"
+  title: "Mispricing and capital-cycle framework v2"
+  core_principle: "在长期结构性趋势里，寻找由资金流、信用周期和市场叙事造成的错误定价；只在基本面未破、卖压衰竭或买方确认、且存在催化剂时行动。"
   trend_leader_lens: "Minervini / David Ryan: judge the main theme, relative strength, leadership, volume confirmation, and whether the stock is being accumulated by real money."
   contrarian_lens: "Keith Gill: allow contrarian concentration only after deep research, clear mispricing, and a credible re-rating path; do not let one thesis dominate the whole account."
   risk_lens: "Oliver Kell: define invalidation and stop discipline before discussing profit targets; if the thesis breaks, exit instead of averaging down emotionally."
   sizing_note: "For high-volatility ideas, prefer staged entries and small tranches. A signal is a research trigger, not an automatic trade order."
+  decision_gates:
+    - "基本面 / Fundamentals: forward revenue, EPS, FCF, margin, orders and market share are not deteriorating materially."
+    - "资本结构 / Capital structure: growth must justify capex, financing cost and dilution; prioritize incremental ROIC over headline growth."
+    - "资金流 / Flow: seek seller exhaustion, price resilience after bad news, and volume-backed buyer return."
+    - "信用 / Credit: check rates, spreads, refinancing and rating risk; high-debt/negative-FCF names need a higher bar."
+    - "估值 / Valuation: distinguish a cheap price from falling future earnings; use forward earnings and cash flow, not trailing PE alone."
+    - "催化剂 / Catalyst: require a dated or observable path such as earnings, orders, FCF inflection, buybacks, policy or rate change."
+    - "失效条件 / Invalidation: write the facts that prove the thesis wrong before entry; do not average down after a thesis break."
+    - "仓位 / Position: size by expected return x probability versus downside; use core, convexity and cash buckets."
+  default_capital_profiles:
+    cash_compounder: "内部现金流支持AI投入；重点看AI是否提升原有现金机器效率。"
+    picks_and_shovels: "AI需求的直接受益者；重点看订单、毛利率、客户CapEx和估值拥挤度。"
+    capital_intensive_ai: "增长依赖大额CapEx/融资；必须验证收入增速是否持续高于CapEx、融资成本和稀释。"
+    cyclical_repair: "重点看基本面二阶导数：从继续恶化转为不再恶化/开始改善。"
+    bank_credit_cycle: "低PE需结合P/B、ROE、资本充足率、信贷成本和主权/信用利差。"
+  default_catalysts:
+    - "财报中的收入、指引、订单、FCF或利润率变化"
+    - "利率/信用条件改善，或政策和监管转向"
+    - "回购、产品周期、产能/CapEx拐点、投资者日"
+
+advisor_research:
+  enabled: true
+  mandate: "不是预测每天涨跌，而是在长期主线中识别基本面、资金流、信用周期和叙事之间的错误定价；用等待、分批与失效纪律提高赔率。"
+  portfolio_architecture:
+    core: "现金流强、可低频复利的龙头；优先腾讯、MSFT及高质量AI卖铲人。"
+    convexity: "只用于可出现50-100%重估的高波动逻辑，如Oracle、BTC或严格回撤后的AI龙头；总组合10-15%。"
+    swing: "Airbus、ADP等质量周期股；利用估值与情绪波动做10-20%波段，不把它们当无限期追涨仓。"
+    reserve: "现金是极端错杀时的选择权；没有同时满足基本面、量价和催化剂时，现金优于勉强交易。"
+  profiles:
+    ai_cash_compounder:
+      tickers: [MSFT, META, GOOGL, AAPL, AMZN, SAP.DE, 0700.HK]
+      mispricing: "市场可能把AI CapEx当作纯成本，低估其对云、广告、搜索、软件订阅和企业效率的现金回报；反过来也可能高估短期AI变现。"
+      fundamentals: "前瞻收入/EPS、云或广告增长、利润率、FCF、回购及AI产品变现。"
+      capital: "内部现金流应覆盖AI投入；核心是AI投入是否提高原有现金机器的ROIC。"
+      credit: "低至中等；主要受长端利率和估值压缩影响，而不是再融资生存风险。"
+      valuation: "用前瞻FCF、利润率和AI增量回报，而不是仅看PE或一年低点。"
+      catalysts: ["云/广告/软件业务加速", "AI产品变现", "FCF和回购保持强劲", "利率回落"]
+    ai_picks_and_shovels:
+      tickers: [AVGO, NVDA, ASML.AS, 2330.TW, 005930.KS, ETN, LR.PA, SU.PA, VRT]
+      mispricing: "市场常在AI CapEx上行时追高卖铲人，也会在一次订单担忧后把需求周期过度下修。"
+      fundamentals: "AI订单、客户CapEx、产能利用率、毛利率、库存、市场份额和产品路线。"
+      capital: "多数是需求受益方而非主要融资方；仍需防范供给扩张后ROIC下降。"
+      credit: "低至中等；主要风险是客户削减CapEx和估值拥挤，而非自身债务。"
+      valuation: "比较未来两年盈利、订单可见度和周期位置；高增长不自动等于高回报。"
+      catalysts: ["大客户CapEx上修", "订单/积压订单增长", "毛利率超预期", "产品周期确认"]
+    ai_capital_cycle:
+      tickers: [ORCL]
+      mispricing: "市场可能低估OCI/RPO转化为现金的速度，也可能低估巨额CapEx、债务、融资成本和稀释对每股价值的侵蚀。"
+      fundamentals: "OCI增长、RPO/订单、客户合同可信度、FCF、毛利率和单位资本回报。"
+      capital: "增长必须持续快于CapEx、融资成本和潜在稀释；这是重资本AI，不应沿用传统软件估值。"
+      credit: "高；评级、债券利差、再融资、利息覆盖和外部融资条件是硬门槛。"
+      valuation: "用未来FCF和增量ROIC，而非传统软件PE；低PE可能是风险溢价。"
+      catalysts: ["OCI/RPO兑现", "FCF拐点", "CapEx计划趋稳", "信用展望稳定或改善"]
+    china_platform_rerating:
+      tickers: [PDD, JD, BABA, 9988.HK, 3690.HK, 1810.HK, 0144.HK]
+      mispricing: "市场可能把政策、地缘和消费疲弱长期外推，也可能低估竞争加剧和盈利下修。"
+      fundamentals: "GMV/用户、货币化率、竞争、利润率、FCF、回购、监管与中国消费数据。"
+      capital: "平台型资产通常轻资本；重点是竞争是否迫使补贴/CapEx吞噬现金流。"
+      credit: "中等；更大风险来自政策、跨境资本流和风险溢价，而非传统债务。"
+      valuation: "未来盈利是否稳定比低PE更重要；看回购、FCF和盈利预期是否停止下修。"
+      catalysts: ["消费数据改善", "盈利预期不再下修", "回购", "政策/地缘风险缓和"]
+    healthcare_repair:
+      tickers: [NVO, UNH, TMO, MDT]
+      mispricing: "市场可能把药价、报销、监管或一次指引下修长期外推；也可能低估产品竞争、临床失败和政策成本。"
+      fundamentals: "核心产品/管线、处方或检测量、报销、利润率、现金流、监管与指引。"
+      capital: "成熟医疗龙头通常现金流较强；生物科技与高研发投入公司需额外看研发回报和并购纪律。"
+      credit: "低至中等；政策、产品竞争和临床结果通常比再融资更重要。"
+      valuation: "按产品周期和可持续利润率估值；避免因为历史高估值回撤就假定安全。"
+      catalysts: ["处方/销量改善", "监管或报销不确定性下降", "临床/产品数据", "指引稳定或上修"]
+    defense_and_aerospace:
+      tickers: [AIR.PA, LDO.MI, SAF.PA, RR.L, BA.L, HO.PA, RHM.DE, LMT, GE]
+      mispricing: "市场可能低估多年国防预算、售后服务和订单积压，也可能在安全叙事最拥挤时高估短期增量。"
+      fundamentals: "订单积压、交付、供应链、售后利润、FCF、预算与采购节奏。"
+      capital: "工业资产，重点看产能爬坡是否把订单转为现金，而非只看订单标题。"
+      credit: "低至中等；Airbus还需关注航空周期、供应链和交付现金流。"
+      valuation: "将订单能见度、FCF兑现与估值位置结合；强势并不等于适合买入。"
+      catalysts: ["交付改善", "订单/预算上修", "供应链缓解", "FCF超预期"]
+    cyclical_quality_repair:
+      tickers: [MC.PA, ITX.MC, VIE.PA, ML.PA, ADP.PA, SIE.DE, DSY.PA, CAT]
+      mispricing: "市场通常把当前疲弱线性外推；高赔率来自基本面二阶导数由继续恶化转为稳定/改善。"
+      fundamentals: "销量、定价、利润率、库存、地区需求、FCF和管理层指引变化。"
+      capital: "看库存、营运资本和CapEx纪律，避免周期末端把高利润当常态。"
+      credit: "中等；利率、消费者/企业需求和工业信用周期决定估值修复速度。"
+      valuation: "用中周期盈利和现金流，不用景气顶点或谷底的单年PE。"
+      catalysts: ["销量止跌", "利润率企稳", "中国/旅行/工业需求改善", "库存去化结束"]
+    financial_credit_cycle:
+      tickers: [UBS, BAC, INGA.AS, GLE.PA, BNP.PA]
+      mispricing: "低PE可能是错杀，也可能是市场预见了盈利周期和信用成本反转。"
+      fundamentals: "P/B、ROE、CET1、净息差、信贷成本、不良率、分红和回购。"
+      capital: "资本充足率和分红覆盖比收入增长更重要；法国银行还受主权利差影响。"
+      credit: "高；观察信贷成本、商业地产、主权利差、融资压力与监管资本。"
+      valuation: "P/B与可持续ROE优先于PE；必须判断当前盈利是否在周期顶部。"
+      catalysts: ["信贷成本受控", "回购/分红", "利率曲线改善", "主权利差收窄"]
+    energy_inflation:
+      tickers: [TTE.PA, XOM]
+      mispricing: "市场会在油价冲击中追逐现金流，也会忽略长期供给、CapEx纪律与股东回报。"
+      fundamentals: "油气实现价、产量、下游利润、CapEx、FCF、回购和分红覆盖。"
+      capital: "重点看CapEx纪律和每桶资本回报，避免在高油价时过度扩张。"
+      credit: "中等；油价、通胀和地缘风险会影响现金流与整体市场利率。"
+      valuation: "用中周期油价下的FCF，不用短期油价高点的PE。"
+      catalysts: ["供给中断/油价上行", "纪律性回购", "CapEx受控", "地缘升级"]
+    crypto_liquidity:
+      tickers: [BTC-USD]
+      mispricing: "BTC不是传统DCF资产；价格由流动性、ETF资金、持仓结构、矿工供给和风险偏好共同决定。"
+      fundamentals: "现货ETF流向、链上流动性、矿工压力、稳定币流动性、监管准入。"
+      capital: "不适用企业CapEx；矿工经济与市场杠杆是供给侧压力测试。"
+      credit: "高；美元流动性、实际利率、杠杆清算和交易所/稳定币风险都可迅速主导价格。"
+      valuation: "不使用PE；用周期位置、流动性和风险回报区间。"
+      catalysts: ["ETF持续净流入", "流动性改善", "极度恐慌后的卖压出清", "监管准入扩大"]
+    speculative_optionality:
+      tickers: [TSLA, PONY, NIO, IQ]
+      mispricing: "叙事可造成极端上行，也可掩盖融资、竞争和执行风险；只适合作为可归零的期权型仓位。"
+      fundamentals: "现金消耗、融资跑道、交付/用户、单位经济、监管和竞争。"
+      capital: "融资依赖度高时，股权稀释本身就是核心风险。"
+      credit: "高；市场流动性收紧时估值和融资能力会同时受压。"
+      valuation: "不以低价判断便宜；先定义情景概率和最大可承受亏损。"
+      catalysts: ["明确商业化/交付验证", "融资风险下降", "政策节点", "强势量价确认"]
+
+market_scan:
+  enabled: true
+  benchmark_ticker: SPY
+  max_themes_in_email: 3
+  min_relative_strength_20d_pct: 1.5
+  early_relative_strength_20d_pct: 0.5
+  candidate_max_1y_position: 0.65
+  candidate_min_5d_pct: -2.0
+  note: "赛道强势只说明资金正在交易它；候选股还必须没有处于一年高位附近，并且没有明显逆势破位。扫描结果是研究优先级，不是买入指令。"
+  tracks:
+    - name: AI利润兑现与卖铲人
+      proxy_ticker: QQQ
+      confirmer_ticker: SMH
+      thesis: "AI主线从单纯CapEx叙事转向订单、利润率、FCF和可量化回报；硬件与云可能分化。"
+      candidates: [MSFT, AVGO, ORCL, VRT]
+      required_checks: "确认客户CapEx、订单、毛利率、FCF；Oracle额外核对融资和信用。"
+    - name: 医疗与生物科技修复
+      proxy_ticker: XLV
+      confirmer_ticker: XBI
+      thesis: "资金可能从高估值科技扩散至防御增长、GLP-1、医疗器械和生物科技；临床与监管风险仍然很高。"
+      candidates: [NVO, UNH, TMO, MDT]
+      required_checks: "确认产品竞争、报销/监管、指引、利润率和现金流；不因药价或政策恐慌自动抄底。"
+    - name: 能源与通胀对冲
+      proxy_ticker: XLE
+      confirmer_ticker: BZ=F
+      thesis: "油价、地缘和通胀预期会把资金推向能源；高油价后的追高是这条赛道的典型错误。"
+      candidates: [TTE.PA, XOM]
+      required_checks: "用中周期油价验证FCF、CapEx纪律、回购与分红覆盖。"
+    - name: 欧洲防务与航空
+      proxy_ticker: ITA
+      confirmer_ticker: ^GDAXI
+      thesis: "欧洲安全预算和订单积压可支持长期主线，但防务股容易在安全事件后变得拥挤。"
+      candidates: [AIR.PA, LDO.MI, SAF.PA, RHM.DE]
+      required_checks: "确认订单向交付、供应链、预算节奏和FCF转化。"
+    - name: 中国平台重估
+      proxy_ticker: KWEB
+      confirmer_ticker: ^HSI
+      thesis: "中国平台可因风险溢价收窄而重估，但消费、竞争、政策和跨境风险会决定持续性。"
+      candidates: [0700.HK, BABA, 9988.HK, PDD, 3690.HK]
+      required_checks: "确认盈利预期不再下修、竞争稳定、回购/FCF和中国消费数据改善。"
 
 global_rules:
   stock_big_up_daily_pct: 5.0
@@ -293,6 +451,10 @@ stocks:
     cost_basis: 119.56
     currency: EUR
     notes: "High-risk AI infrastructure rebound holding. Watch debt, FCF, capex, Fed path."
+    advisor_profile:
+      capital_profile: capital_intensive_ai
+      valuation_question: "OCI/RPO增长能否长期高于CapEx、融资成本和潜在稀释，而不是传统软件PE是否低。"
+      catalysts: ["OCI/RPO订单兑现", "FCF改善", "CapEx/融资计划更可控", "信用展望稳定或改善"]
     entry_alert:
       enabled: true
       daily_drop_pct: -8.0
@@ -359,6 +521,10 @@ stocks:
     cost_basis: 320.50
     currency: EUR
     notes: "Quality mega-cap tech. More defensive than Oracle/PDD/Meituan."
+    advisor_profile:
+      capital_profile: cash_compounder
+      valuation_question: "AI CapEx是否提升Azure、Copilot和企业软件的现金回报，而非只增加投入。"
+      catalysts: ["Azure增长", "Copilot变现", "FCF/ROIC保持韧性", "企业IT预算改善"]
     rotation:
       role: core
       sell_strength:
@@ -788,6 +954,10 @@ stocks:
     position: 0
     currency: USD
     notes: "Priority entry watch: AI networking/custom silicon + software. Alert on sharp selloff if fundamentals remain intact."
+    advisor_profile:
+      capital_profile: picks_and_shovels
+      valuation_question: "AI收入、客户CapEx和毛利率预期是否被错误下修；不以单日超跌代替估值判断。"
+      catalysts: ["AI半导体/网络订单", "大客户CapEx指引", "财报中的AI收入和毛利率"]
     entry_alert:
       enabled: true
       daily_drop_pct: -8.0
@@ -1094,6 +1264,24 @@ market_indicators:
   - name: Nasdaq 100 ETF
     ticker: QQQ
     notes: "AI / mega-cap tech risk appetite proxy."
+
+  - name: Semiconductor ETF
+    ticker: SMH
+    rules:
+      watch_only: true
+    notes: "AI hardware/capex risk-appetite proxy. Price only; not a substitute for hyperscaler capex data."
+
+  - name: High Yield Credit ETF
+    ticker: HYG
+    rules:
+      watch_only: true
+    notes: "High-yield credit stress proxy. A sharp fall versus investment-grade credit can warn that financing conditions are tightening."
+
+  - name: Investment Grade Credit ETF
+    ticker: LQD
+    rules:
+      watch_only: true
+    notes: "Investment-grade credit proxy used with HYG. It is a market proxy, not a company credit rating."
 
 geopolitical_framework:
   enabled: true

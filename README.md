@@ -27,6 +27,45 @@ Technical terms are explained briefly in the email. For example, volume is descr
 
 The tone is deliberately direct: recommendation, rationale, decision condition, and risk guardrail.
 
+## Investment Framework v2
+
+The bot is now built around one question: is this a genuine mispricing with an identifiable path to re-rating, or merely a falling price?
+
+For a real opportunity, it requires more than a low price. The desired setup is:
+
+`fundamentals intact + seller exhaustion or buyer confirmation + valuation gap + catalyst + defined invalidation`
+
+For the highest-priority buy, add, re-rating, and strength signals, the email includes a fixed bilingual eight-gate review:
+
+| Gate | What it prevents |
+|---|---|
+| Fundamentals | confusing a broken earnings/FCF/market-share story with a bargain |
+| Capital structure | ignoring capex, financing cost, dilution, and incremental ROIC |
+| Flow | buying the first heavy selloff before selling pressure has faded |
+| Credit | missing refinancing, rating, yield, or spread risk |
+| Valuation | mistaking a 1-year low or low trailing PE for intrinsic value |
+| Catalyst | holding a cheap stock with no route to re-rating |
+| Invalidation | averaging down after the original thesis is disproven |
+| Position | letting a high-conviction idea overwhelm the account |
+
+The eight-gate table deliberately separates what automated data can observe (price, volume, range position, public red-flag headlines) from the facts that still need human confirmation (forward estimates, FCF, credit, filings, and management guidance). A clean news screen is not a statement that fundamentals are safe.
+
+The framework recognizes several capital profiles. Cash compounders such as Microsoft and Tencent are judged by whether AI improves an existing cash machine. AI picks-and-shovels such as Broadcom are judged by demand, margins, customer capex, and crowding. Capital-intensive AI stories such as Oracle must prove that AI revenue growth exceeds capex, financing cost, and dilution over time. Banks are evaluated through capital, credit cost, and sovereign/credit risk, rather than PE alone.
+
+The complete project mandate, portfolio architecture, research profiles for the watchlist, capital-cycle lens, price-volume protocol, and automation boundaries are documented in [Investment Operating System](docs/INVESTMENT_OPERATING_SYSTEM.md).
+
+## Market Rotation Scan
+
+The daily report also scans selected market tracks instead of waiting for a single stock to rally. It compares each track with `SPY` over 20 trading days, asks a second proxy to confirm the move, then searches only for candidates that are not already near the top of their one-year range.
+
+This makes three distinctions explicit:
+
+- `confirmed flow`: capital is already favoring the track, but it may still be too late for the listed candidates;
+- `early rotation`: relative strength is beginning, so a candidate can be researched before the move becomes consensus;
+- `not confirmed`: no pre-emptive trade merely because a narrative sounds attractive.
+
+The default scan includes AI profit realization, healthcare/biotech repair, energy/inflation, European defense/aerospace, and China-platform re-rating. A candidate is only a research priority when the track has relative strength, the stock remains below the configured one-year range limit, and its short-term price action is not breaking down. Fundamental validation remains mandatory.
+
 ## External Data Best Practices
 
 The bot is deliberately conservative when calling external data sources:
