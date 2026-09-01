@@ -66,6 +66,20 @@ This makes three distinctions explicit:
 
 The default scan includes AI profit realization, healthcare/biotech repair, energy/inflation, European defense/aerospace, and China-platform re-rating. A candidate is only a research priority when the track has relative strength, the stock remains below the configured one-year range limit, and its short-term price action is not breaking down. Fundamental validation remains mandatory.
 
+## Elite Franchise Deep-Reset Watch
+
+The bot separately monitors deep resets in the Magnificent Seven, memory/HBM leaders, and AI franchise leaders. It is stricter than an ordinary drawdown alert: the stock must be at least 20% below its one-year high, then the report labels the tape as active liquidation, seller-exhaustion watch, buyer confirmation, or unconfirmed.
+
+The default universe includes Apple, Microsoft, Alphabet, Amazon, Meta, Tesla, Nvidia, SK Hynix, Samsung, Micron, Broadcom, and Marvell. Each group has its own required fundamental checks. For example, memory leaders require HBM share, DRAM/NAND pricing, inventory, and capex discipline to remain intact; AI leaders require hyperscaler capex, order visibility, margin, customer concentration, and FCF checks.
+
+SpaceX remains a manual private-market watch. The bot will not use `SPCX` or another unofficial ticker as if it were a public-market quote.
+
+## Global Leadership Movers
+
+Every daily email includes a top-10 gainers and top-10 losers board drawn from a curated global universe of liquid leaders, mega caps, franchise names, and selected high-potential assets across the U.S., Europe, and Hong Kong. It labels each name as held, already tracked, or an external candidate.
+
+This is intentionally not an all-exchange ranking: raw market mover lists are dominated by low-float and low-liquidity names, which do not fit this strategy. The board is a discovery layer. Gainers identify emerging leadership and potential no-chase/trim zones; losers enter the fundamental, credit, and price-volume review process before any purchase is considered.
+
 ## External Data Best Practices
 
 The bot is deliberately conservative when calling external data sources:

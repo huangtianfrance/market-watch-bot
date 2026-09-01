@@ -110,7 +110,7 @@ advisor_research:
       valuation: "用前瞻FCF、利润率和AI增量回报，而不是仅看PE或一年低点。"
       catalysts: ["云/广告/软件业务加速", "AI产品变现", "FCF和回购保持强劲", "利率回落"]
     ai_picks_and_shovels:
-      tickers: [AVGO, NVDA, ASML.AS, 2330.TW, 005930.KS, ETN, LR.PA, SU.PA, VRT]
+      tickers: [AVGO, NVDA, MRVL, MU, 000660.KS, ASML.AS, 2330.TW, 005930.KS, ETN, LR.PA, SU.PA, VRT]
       mispricing: "市场常在AI CapEx上行时追高卖铲人，也会在一次订单担忧后把需求周期过度下修。"
       fundamentals: "AI订单、客户CapEx、产能利用率、毛利率、库存、市场份额和产品路线。"
       capital: "多数是需求受益方而非主要融资方；仍需防范供给扩张后ROIC下降。"
@@ -231,6 +231,86 @@ market_scan:
       candidates: [0700.HK, BABA, 9988.HK, PDD, 3690.HK]
       required_checks: "确认盈利预期不再下修、竞争稳定、回购/FCF和中国消费数据改善。"
 
+elite_franchise_reset_watch:
+  enabled: true
+  min_drawdown_from_1y_high_pct: -20.0
+  panic_daily_drop_pct: -4.0
+  panic_volume_ratio: 1.8
+  seller_exhaustion_volume_ratio: 0.8
+  buyer_confirmation_daily_pct: 1.0
+  buyer_confirmation_volume_ratio: 1.3
+  max_candidates_per_email: 4
+  principle: "旗舰资产大跌是研究机会，不是自动加仓理由。先区分主动抛售、卖压衰竭和买方确认；只在各自关键基本面未破时分批。"
+  groups:
+    - name: 美股七姐妹 / Magnificent Seven
+      tickers: [AAPL, MSFT, GOOGL, AMZN, META, TSLA, NVDA]
+      required_checks: "收入与利润预期、AI回报、核心产品需求、FCF；Tesla额外核对交付、价格战、自动驾驶兑现与融资需求。"
+    - name: 存储与HBM龙头 / Memory leaders
+      tickers: [000660.KS, 005930.KS, MU]
+      required_checks: "HBM份额与定价、DRAM/NAND价格、库存、客户CapEx、毛利率与扩产纪律。"
+    - name: AI核心卖铲人 / AI franchise leaders
+      tickers: [NVDA, AVGO, MRVL]
+      required_checks: "Hyperscaler CapEx、订单/积压订单、定制芯片与网络需求、毛利率、客户集中度和FCF。"
+  private_company_manual_watch:
+    name: SpaceX
+    note: "SpaceX无可靠公开股票代码；只在私募估值显著下修、二级份额折价扩大，或火箭发射/Starlink/政府合同基本面发生重大变化时人工复核，绝不把SPCX等非官方代码当行情。"
+
+market_mover_watch:
+  enabled: true
+  send_daily_email: true
+  external_only: false
+  max_rows: 10
+  external_max_rows: 5
+  note: "这是全球高流动性龙头、明星和高潜力资产的精选池，不是全交易所原始涨跌榜。原始榜单常被小盘股、仙股和低流动性标的污染。"
+  universe:
+    - {ticker: AAPL, name: Apple, region: US, style: "Mega-cap technology"}
+    - {ticker: MSFT, name: Microsoft, region: US, style: "AI cash compounder"}
+    - {ticker: NVDA, name: Nvidia, region: US, style: "AI semiconductor leader"}
+    - {ticker: GOOGL, name: Alphabet, region: US, style: "AI/search/cloud"}
+    - {ticker: AMZN, name: Amazon, region: US, style: "Cloud/consumer platform"}
+    - {ticker: META, name: Meta, region: US, style: "AI advertising platform"}
+    - {ticker: TSLA, name: Tesla, region: US, style: "High-beta autonomy/EV"}
+    - {ticker: AVGO, name: Broadcom, region: US, style: "AI custom silicon/networking"}
+    - {ticker: ORCL, name: Oracle, region: US, style: "Capital-intensive AI cloud"}
+    - {ticker: MU, name: Micron, region: US, style: "HBM/memory"}
+    - {ticker: MRVL, name: Marvell, region: US, style: "AI networking/custom silicon"}
+    - {ticker: AMD, name: AMD, region: US, style: "AI compute challenger"}
+    - {ticker: PLTR, name: Palantir, region: US, style: "AI software"}
+    - {ticker: VRT, name: Vertiv, region: US, style: "Data-center power/cooling"}
+    - {ticker: NVO, name: Novo Nordisk, region: US, style: "Healthcare/GLP-1"}
+    - {ticker: UNH, name: UnitedHealth, region: US, style: "Healthcare services"}
+    - {ticker: LLY, name: Eli Lilly, region: US, style: "Healthcare/GLP-1"}
+    - {ticker: TMO, name: Thermo Fisher, region: US, style: "Life-science tools"}
+    - {ticker: MDT, name: Medtronic, region: US, style: "Medical devices"}
+    - {ticker: JPM, name: JPMorgan, region: US, style: "Financial leader"}
+    - {ticker: XOM, name: ExxonMobil, region: US, style: "Energy leader"}
+    - {ticker: ANET, name: Arista Networks, region: US, style: "AI networking"}
+    - {ticker: CRWD, name: CrowdStrike, region: US, style: "Cybersecurity leader"}
+    - {ticker: PANW, name: Palo Alto Networks, region: US, style: "Cybersecurity platform"}
+    - {ticker: NFLX, name: Netflix, region: US, style: "Streaming platform"}
+    - {ticker: V, name: Visa, region: US, style: "Payments compounder"}
+    - {ticker: MA, name: Mastercard, region: US, style: "Payments compounder"}
+    - {ticker: AIR.PA, name: Airbus, region: Europe, style: "Aerospace/defense"}
+    - {ticker: ASML.AS, name: ASML, region: Europe, style: "Semiconductor equipment"}
+    - {ticker: SAP.DE, name: SAP, region: Europe, style: "Enterprise software"}
+    - {ticker: MC.PA, name: LVMH, region: Europe, style: "Luxury leader"}
+    - {ticker: SU.PA, name: Schneider Electric, region: Europe, style: "Electrification/data center"}
+    - {ticker: SIE.DE, name: Siemens, region: Europe, style: "Automation/industrial"}
+    - {ticker: RHM.DE, name: Rheinmetall, region: Europe, style: "Defense"}
+    - {ticker: TTE.PA, name: TotalEnergies, region: Europe, style: "Energy"}
+    - {ticker: NOVO-B.CO, name: Novo Nordisk Copenhagen, region: Europe, style: "Healthcare/GLP-1"}
+    - {ticker: NESN.SW, name: Nestle, region: Europe, style: "Defensive consumer"}
+    - {ticker: RACE, name: Ferrari, region: Europe, style: "Luxury compounder"}
+    - {ticker: HEIA.AS, name: Heineken, region: Europe, style: "Global consumer brands"}
+    - {ticker: 0700.HK, name: Tencent, region: Hong Kong, style: "China platform/AI"}
+    - {ticker: 9988.HK, name: Alibaba, region: Hong Kong, style: "China cloud/platform"}
+    - {ticker: 3690.HK, name: Meituan, region: Hong Kong, style: "China consumption platform"}
+    - {ticker: 1810.HK, name: Xiaomi, region: Hong Kong, style: "China consumer tech/EV"}
+    - {ticker: 0005.HK, name: HSBC, region: Hong Kong, style: "Global bank"}
+    - {ticker: 1299.HK, name: AIA, region: Hong Kong, style: "Asian insurance"}
+    - {ticker: 0388.HK, name: Hong Kong Exchanges, region: Hong Kong, style: "Capital-markets infrastructure"}
+    - {ticker: 1211.HK, name: BYD, region: Hong Kong, style: "EV/energy-storage leader"}
+
 global_rules:
   stock_big_up_daily_pct: 5.0
   stock_big_up_5d_pct: 10.0
@@ -299,6 +379,48 @@ stocks:
           - "Memory cycle recovery fails or pricing weakens materially"
           - "HBM/AI memory competitiveness weakens versus SK Hynix or Micron"
           - "Foundry losses or capex pressure materially worsen"
+
+  - name: SK Hynix
+    ticker: 000660.KS
+    position: 0
+    currency: KRW
+    notes: "Watchlist: HBM and memory-cycle leader. Special deep-reset watch only."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      fundamental_guardrail:
+        red_flags:
+          - "HBM demand, pricing, or market share weakens materially"
+          - "Memory inventory rebuild or DRAM/NAND pricing deteriorates materially"
+          - "Capex expansion materially exceeds sustainable memory-cycle demand"
+
+  - name: Micron
+    ticker: MU
+    position: 0
+    currency: USD
+    notes: "Watchlist: U.S. memory/HBM leader. Special deep-reset watch only."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      fundamental_guardrail:
+        red_flags:
+          - "HBM demand, pricing, or market share weakens materially"
+          - "Memory inventory rebuild or DRAM/NAND pricing deteriorates materially"
+          - "Capex expansion materially exceeds sustainable memory-cycle demand"
+
+  - name: Marvell Technology
+    ticker: MRVL
+    position: 0
+    currency: USD
+    notes: "Watchlist: AI networking/custom silicon leader. Special deep-reset watch only."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      fundamental_guardrail:
+        red_flags:
+          - "Custom silicon, optical, or data-center demand weakens materially"
+          - "Customer concentration or AI order visibility deteriorates materially"
+          - "Gross margin, cash flow, or guidance resets materially lower"
 
   - name: SpaceX
     ticker: SPCX

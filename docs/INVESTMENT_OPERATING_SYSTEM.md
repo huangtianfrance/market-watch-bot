@@ -99,6 +99,27 @@ The scanner is designed for early research, not for chasing a sector that has al
 
 The scanner can surface an early research candidate before a headline becomes consensus. It cannot identify an intrinsic bargain from price data alone. In particular, a candidate below its one-year high may be correctly discounted because earnings, regulation, competition, or financing have deteriorated.
 
+## Elite Franchise Deep-Reset Protocol
+
+Exceptional franchises can produce exceptional returns after a real valuation reset, but they are also the names investors most often average down too early. The deep-reset watch therefore requires a 20%+ drawdown from the one-year high before it becomes visible, and then applies a staged decision.
+
+| Tape state | Interpretation | Default action |
+|---|---|---|
+| Active liquidation | Large down day with unusually high volume | Do not add; the market is still forcing risk out |
+| Seller-exhaustion watch | Price is weak but volume has faded | Research the business; wait for price resilience or a reclaim |
+| Buyer confirmation | Positive price move with meaningful volume after the reset | Only after red-flag checks, consider a very small first tranche |
+| Deep reset, unconfirmed | Drawdown is real but the tape is ambiguous | No trade; collect earnings, guidance, credit and industry evidence |
+
+The universe is the Magnificent Seven, memory/HBM leaders (SK Hynix, Samsung, Micron), and AI franchise leaders (Nvidia, Broadcom, Marvell). Tesla is included because it is one of the seven, but its EV price competition, autonomy execution, and financing sensitivity require a higher bar than the cash-compounder names.
+
+SpaceX is intentionally manual. A private-market valuation, secondary-share discount, launch cadence, Starlink economics, and government contract development may justify research; an unofficial public ticker never does.
+
+## Global Leadership Movers
+
+The daily leadership board ranks a curated universe of liquid U.S., European, and Hong Kong franchises, large caps, and selected high-potential names by daily percentage change. It always shows the top ten gainers and top ten losers, together with five-day return, volume versus normal, one-year range position, region/style, and whether the name is already held or tracked.
+
+It is not a global exchange-wide leaderboard. That would mostly surface penny stocks, small floats, and event-driven noise. The purpose is to discover investable leadership and potential deep resets outside the existing personal list. A place on the board is never a buy or sell instruction.
+
 ## Automation Boundaries
 
 The bot may issue a research or review signal. It never issues an automatic order.

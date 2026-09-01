@@ -1821,6 +1821,167 @@ def market_rotation_scan(config: Dict[str, Any], quote_cache: Dict[str, Quote]) 
     return "\n".join(lines), bool(candidate_rows)
 
 
+def one_year_drawdown_pct(quote: Quote) -> Optional[float]:
+    high = history_window_max(quote, 1)
+    if high is None or high <= 0:
+        return None
+    return (quote.last / high - 1) * 100
+
+
+def elite_franchise_reset_watch(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> Tuple[str, bool]:
+    """Apply a stricter, staged process to deep resets in exceptional large-cap franchises."""
+    settings = config.get("elite_franchise_reset_watch", {})
+    if not settings.get("enabled", False):
+        return "", False
+
+    stock_map = {stock.get("ticker"): stock for stock in config.get("stocks", [])}
+    ticker_groups: Dict[str, Tuple[str, str]] = {}
+    for group in settings.get("groups", []):
+        for ticker in group.get("tickers", []):
+            if ticker not in ticker_groups:
+                ticker_groups[ticker] = (group.get("name", "旗舰资产"), group.get("required_checks", "财报与基本面核查"))
+
+    min_drawdown = float(settings.get("min_drawdown_from_1y_high_pct", -20.0))
+    panic_daily = float(settings.get("panic_daily_drop_pct", -4.0))
+    panic_volume = float(settings.get("panic_volume_ratio", 1.8))
+    quiet_volume = float(settings.get("seller_exhaustion_volume_ratio", 0.8))
+    buyer_daily = float(settings.get("buyer_confirmation_daily_pct", 1.0))
+    buyer_volume = float(settings.get("buyer_confirmation_volume_ratio", 1.3))
+    rows: List[List[str]] = []
+
+    for ticker, (group_name, required_checks) in ticker_groups.items():
+        stock = stock_map.get(ticker)
+        if not stock or stock.get("disabled"):
+            continue
+        try:
+            quote = get_quote(ticker, quote_cache)
+        except Exception:
+            continue
+        drawdown = one_year_drawdown_pct(quote)
+        if drawdown is None or drawdown > min_drawdown:
+            continue
+        ratio = volume_ratio(quote)
+        ratio_text = "n/a" if ratio is None else f"{ratio:.1f}x"
+        if quote.daily_pct <= panic_daily and ratio is not None and ratio >= panic_volume:
+            phase = "第一轮主动抛售 / active liquidation"
+            action = "不加仓；这是风险释放，不是确认底部。等待卖压衰竭。"
+        elif quote.daily_pct >= buyer_daily and ratio is not None and ratio >= buyer_volume:
+            phase = "买方开始确认 / buyer confirmation"
+            action = "红旗核查通过后，可考虑第一笔很小的分批仓位；不要一次买满。"
+        elif quote.daily_pct <= 0 and ratio is not None and ratio <= quiet_volume:
+            phase = "卖压衰竭观察 / seller exhaustion watch"
+            action = "进入重点研究；等不创新低或放量收复关键价位，再决定是否分批。"
+        else:
+            phase = "深回撤，尚未确认 / deep reset, unconfirmed"
+            action = "只做基本面与信用核查；等待量价给出下一步证据。"
+        red_flag = trim_text(plain_text(red_flag_news_check(stock)), 95)
+        rows.append(
+            [
+                group_name,
+                f"{stock['name']} ({ticker})",
+                f"距一年高点 {drawdown:+.1f}%；今日 {quote.daily_pct:+.1f}%；量 {ratio_text}",
+                phase,
+                trim_text(required_checks, 115) + "<br>新闻筛查：" + red_flag,
+                action,
+            ]
+        )
+
+    if not rows:
+        return "", False
+    rows = rows[: int(settings.get("max_candidates_per_email", 4))]
+    private_note = settings.get("private_company_manual_watch", {}).get("note", "")
+    lines = [
+        settings.get("principle", "旗舰资产大跌是研究机会，不是自动加仓理由。"),
+        markdown_table(["类别", "标的", "回撤/量价", "阶段", "必须核对", "建议"], rows),
+    ]
+    if private_note:
+        lines.extend(["", f"SpaceX人工观察：{private_note}"])
+    return "\n".join(lines), True
+
+
+def market_mover_watch(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> str:
+    """Rank a curated, liquid global leadership universe instead of noisy all-market penny-stock movers."""
+    settings = config.get("market_mover_watch", {})
+    if not settings.get("enabled", False):
+        return ""
+
+    configured_stocks = {stock.get("ticker"): stock for stock in config.get("stocks", [])}
+    movers: List[Tuple[Dict[str, Any], Quote]] = []
+    for asset in settings.get("universe", []):
+        if settings.get("external_only", False) and asset.get("ticker") in configured_stocks:
+            continue
+        try:
+            movers.append((asset, get_quote(asset["ticker"], quote_cache)))
+        except Exception:
+            continue
+    if not movers:
+        return "全球旗舰资产榜数据不足 / Global mover board has insufficient data."
+
+    def table_rows(items: List[Tuple[Dict[str, Any], Quote]]) -> List[List[str]]:
+        rows: List[List[str]] = []
+        for asset, quote in items:
+            existing = configured_stocks.get(asset["ticker"])
+            if settings.get("external_only", False):
+                coverage = "外部候选 / external"
+            elif existing and existing.get("position", 0) > 0:
+                coverage = "持仓 / held"
+            elif existing:
+                coverage = "已有观察 / already tracked"
+            else:
+                coverage = "外部候选 / external"
+            rows.append(
+                [
+                    f"{asset['name']} ({asset['ticker']})",
+                    f"{asset.get('region', '')} · {asset.get('style', '')}",
+                    f"今日 {quote.daily_pct:+.1f}%；5日 {pct_line(quote.five_day_pct)}",
+                    f"量 {volume_ratio(quote):.1f}x" if volume_ratio(quote) is not None else "量 n/a",
+                    one_year_position_label(quote),
+                    coverage,
+                ]
+            )
+        return rows
+
+    count = int(settings.get("max_rows", 10))
+    gainers = sorted(movers, key=lambda item: item[1].daily_pct, reverse=True)[:count]
+    losers = sorted(movers, key=lambda item: item[1].daily_pct)[:count]
+    external_movers = [item for item in movers if item[0]["ticker"] not in configured_stocks]
+    external_count = int(settings.get("external_max_rows", 5))
+    external_spotlight = sorted(external_movers, key=lambda item: abs(item[1].daily_pct), reverse=True)[:external_count]
+    lines = [
+        settings.get("note", "精选资产排行榜，不是全交易所原始涨跌榜。"),
+        "",
+        "综合涨幅前十 / Overall Top 10 Gainers",
+        markdown_table(["资产", "地区/类型", "涨跌", "成交量", "一年位置", "覆盖"], table_rows(gainers)),
+        "",
+        "综合跌幅前十 / Overall Top 10 Losers",
+        markdown_table(["资产", "地区/类型", "涨跌", "成交量", "一年位置", "覆盖"], table_rows(losers)),
+    ]
+    if external_spotlight:
+        lines.extend(
+            [
+                "",
+                "名单外机会雷达 / External Opportunity Radar",
+                markdown_table(
+                    ["资产", "地区/类型", "涨跌", "成交量", "一年位置", "结论"],
+                    [
+                        row[:-1]
+                        + [
+                            "外部候选：若大跌，进入基本面/信用/量价复核；若大涨，先判断是否已过热。"
+                        ]
+                        for row in table_rows(external_spotlight)
+                    ],
+                ),
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "用法：榜单是发现线索，不是交易指令。跌幅榜只进入基本面、信用和量价复核；涨幅榜用于识别赛道领导力与可能的止盈/不追高区。",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def history_window_min(quote: Quote, years: int) -> Optional[float]:
     trading_days = 252 * years
     close = quote.close_history.dropna()
@@ -2426,6 +2587,20 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
             f"Market rotation scan failed: {exc}",
         )
 
+    elite_reset_section = ""
+    try:
+        elite_reset_section, elite_reset_triggered = elite_franchise_reset_watch(config, quote_cache)
+        triggered = triggered or elite_reset_triggered
+    except Exception as exc:
+        elite_reset_section = bilingual(
+            f"旗舰资产深回撤扫描失败：{exc}",
+            f"Elite franchise reset watch failed: {exc}",
+        )
+
+    market_mover_section = market_mover_watch(config, quote_cache)
+    if config.get("market_mover_watch", {}).get("send_daily_email", False):
+        triggered = True
+
     stock_rows: List[List[str]] = []
     stock_errors: List[str] = []
     for stock in [item for item in config.get("stocks", []) if not item.get("disabled")]:
@@ -2484,15 +2659,21 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
                 ]
             ]
 
-    has_any_signal = bool(rotation_alerts or stock_rows or stock_errors or indicator_alerts or market_scan_section)
+    has_any_signal = bool(rotation_alerts or stock_rows or stock_errors or indicator_alerts or market_scan_section or elite_reset_section or market_mover_section)
 
     lines.append("一、今日结论 / Today's Conclusion")
     lines.append("--------------------------------")
     lines.append(executive_summary(rotation_alerts, stock_rows, indicator_alerts))
     lines.append("")
 
+    if market_mover_section:
+        lines.append("二、全球旗舰资产异动榜 / Global Leadership Movers")
+        lines.append("-----------------------------------------------------")
+        lines.append(market_mover_section)
+        lines.append("")
+
     if rotation_alerts or stock_rows:
-        lines.append("二、可执行信号 / Actionable Signals")
+        lines.append("三、可执行信号 / Actionable Signals")
         lines.append("----------------------------------")
         if stock_rows:
             lines.append(concise_signal_briefs(stock_rows, max_rows=4))
@@ -2502,15 +2683,21 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
             lines.append("\n\n".join(rotation_alerts[:2]))
         lines.append("")
 
+    if elite_reset_section:
+        lines.append("四、旗舰资产深回撤 / Elite Franchise Deep-Reset Watch")
+        lines.append("---------------------------------------------------------")
+        lines.append(elite_reset_section)
+        lines.append("")
+
     if market_scan_section:
-        lines.append("三、赛道轮动扫描 / Market Rotation Scan")
+        lines.append("五、赛道轮动扫描 / Market Rotation Scan")
         lines.append("------------------------------------------")
         lines.append(market_scan_section)
         lines.append("")
 
     decision_memos = decision_memos_for_rows(stock_rows, config, quote_cache)
     if decision_memos:
-        lines.append("四、交易前八栏复核 / Pre-Trade Eight-Gate Review")
+        lines.append("六、交易前八栏复核 / Pre-Trade Eight-Gate Review")
         lines.append("---------------------------------------------------")
         lines.append("只对真正触发的机会/强势信号展开。自动数据用于筛查，不替代财报、估值与信用人工核验。")
         lines.append("Expanded only for decision-level signals. Automated data screens for risk; it does not replace earnings, valuation, or credit verification.")
@@ -2520,7 +2707,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
 
     supplemental_stock_rows = top_signal_rows(stock_rows, max_rows=10)[4:] if stock_rows else []
     if supplemental_stock_rows or stock_errors:
-        lines.append("五、补充观察 / Additional Watch")
+        lines.append("七、补充观察 / Additional Watch")
         lines.append("-------------------------------")
         if supplemental_stock_rows:
             lines.append(tight_portfolio_diagnosis(supplemental_stock_rows, max_names=6))
@@ -2539,7 +2726,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
     regime_section = portfolio_regime_table(config, quote_cache) if (rotation_alerts or stock_rows) else ""
 
     if indicator_alerts or geo_section or regime_section:
-        lines.append("六、市场温度 / Market Temperature")
+        lines.append("八、市场温度 / Market Temperature")
         lines.append("--------------------------------")
         if regime_section:
             lines.append(regime_section)
@@ -2557,18 +2744,18 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
 
     omitted_section = not_expanded_today(config, quote_cache, stock_rows)
     if omitted_section:
-        lines.append("七、今天不单独展开 / Not Expanded Today")
+        lines.append("九、今天不单独展开 / Not Expanded Today")
         lines.append("-------------------------------------")
         lines.append(omitted_section)
         lines.append("")
 
     if influencer_rows:
-        lines.append("八、高手雷达 / Influencer Radar")
+        lines.append("十、高手雷达 / Influencer Radar")
         lines.append("--------------------------------")
         lines.append(influencer_blocks(influencer_rows[:3]))
         lines.append("")
 
-    lines.append("九、经验提醒 / Experience Reminders")
+    lines.append("十一、经验提醒 / Experience Reminders")
     lines.append("-----------------------------------")
     lines.append(experience_reminders())
     lines.append("")
