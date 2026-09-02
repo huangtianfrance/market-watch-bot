@@ -1982,6 +1982,124 @@ def market_mover_watch(config: Dict[str, Any], quote_cache: Dict[str, Quote]) ->
     return "\n".join(lines)
 
 
+def china_recovery_watch(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> str:
+    """Track the four variables that drive China-platform risk appetite and disciplined averaging decisions."""
+    settings = config.get("china_recovery_watch", {})
+    if not settings.get("enabled", False):
+        return ""
+
+    stock_map = {stock.get("ticker"): stock for stock in config.get("stocks", [])}
+    try:
+        rate = indicator_quote(config, quote_cache, "US 10Y Yield")
+        dollar = get_quote(settings.get("dollar_ticker", "DX-Y.NYB"), quote_cache)
+        kweb = get_quote(settings.get("china_tech_proxy", "KWEB"), quote_cache)
+        hsi = get_quote(settings.get("china_market_proxy", "^HSI"), quote_cache)
+    except Exception as exc:
+        return f"中概四因子数据不足 / China four-factor data unavailable: {exc}"
+    if not rate or rate.five_day_pct is None or dollar.five_day_pct is None:
+        return "中概四因子数据不足 / China four-factor data unavailable."
+
+    factor_rows: List[List[str]] = []
+    score = 0
+    rate_change = rate.five_day_pct
+    if rate_change <= float(settings.get("rate_support_5d_change", -1.0)):
+        rate_state, rate_score = "支持 / supportive", 1
+    elif rate_change >= float(settings.get("rate_risk_5d_change", 1.0)):
+        rate_state, rate_score = "压力 / headwind", -1
+    else:
+        rate_state, rate_score = "中性 / neutral", 0
+    score += rate_score
+    factor_rows.append(["美国利率 / US rates", rate_state, f"10Y {rate.last / 10:.2f}%；5日 {rate_change:+.1f}%", "利率下行通常有利于长久期和中概风险偏好；反之压估值。"])
+
+    dollar_change = dollar.five_day_pct
+    if dollar_change <= float(settings.get("dollar_support_5d_pct", -0.5)):
+        dollar_state, dollar_score = "支持 / supportive", 1
+    elif dollar_change >= float(settings.get("dollar_risk_5d_pct", 0.5)):
+        dollar_state, dollar_score = "压力 / headwind", -1
+    else:
+        dollar_state, dollar_score = "中性 / neutral", 0
+    score += dollar_score
+    factor_rows.append(["美元 / US dollar", dollar_state, f"DXY 5日 {dollar_change:+.1f}%", "美元走弱通常放松全球风险资产压力；不是单独买入中概的理由。"])
+
+    holding_quotes: List[Quote] = []
+    for ticker in settings.get("tickers", []):
+        try:
+            quote = get_quote(ticker, quote_cache)
+            if quote.five_day_pct is not None:
+                holding_quotes.append(quote)
+        except Exception:
+            continue
+    earnings_proxy = sorted(quote.five_day_pct for quote in holding_quotes)[len(holding_quotes) // 2] if holding_quotes else None
+    if earnings_proxy is None:
+        earnings_state, earnings_score, earnings_data = "数据不足 / unavailable", 0, "PDD/美团/腾讯缺少5日数据"
+    elif earnings_proxy >= float(settings.get("earnings_proxy_support_5d_pct", 2.0)):
+        earnings_state, earnings_score, earnings_data = "市场确认改善 / market improving", 1, f"三只持仓5日中位数 {earnings_proxy:+.1f}%"
+    elif earnings_proxy <= float(settings.get("earnings_proxy_risk_5d_pct", -2.0)):
+        earnings_state, earnings_score, earnings_data = "市场在下修 / market weakening", -1, f"三只持仓5日中位数 {earnings_proxy:+.1f}%"
+    else:
+        earnings_state, earnings_score, earnings_data = "中性 / neutral", 0, f"三只持仓5日中位数 {earnings_proxy:+.1f}%"
+    score += earnings_score
+    factor_rows.append(["中国盈利周期 / China earnings", earnings_state, earnings_data, "这是市场对盈利的代理，不是实际财报；仍需核对GMV、广告、利润率、FCF和指引。"])
+
+    kweb_return = trailing_return(kweb, 20)
+    hsi_return = trailing_return(hsi, 20)
+    relative = None if kweb_return is None or hsi_return is None else kweb_return - hsi_return
+    if relative is None:
+        premium_state, premium_score, premium_data = "数据不足 / unavailable", 0, "KWEB/恒指历史不足"
+    elif relative >= float(settings.get("risk_premium_support_relative_20d_pct", 1.0)):
+        premium_state, premium_score, premium_data = "风险溢价收窄 / easing", 1, f"KWEB相对恒指20日 {relative:+.1f}pct"
+    elif relative <= float(settings.get("risk_premium_risk_relative_20d_pct", -1.0)):
+        premium_state, premium_score, premium_data = "风险溢价扩大 / widening", -1, f"KWEB相对恒指20日 {relative:+.1f}pct"
+    else:
+        premium_state, premium_score, premium_data = "中性 / neutral", 0, f"KWEB相对恒指20日 {relative:+.1f}pct"
+    score += premium_score
+    factor_rows.append(["China risk premium", premium_state, premium_data, "KWEB相对香港大盘弱，常意味着跨境中国科技风险溢价仍在扩大。"])
+
+    if score >= 3:
+        macro_conclusion = "四因子多数支持 / favorable: 可以寻找低位、基本面未破的分批机会。"
+    elif score <= -2:
+        macro_conclusion = "四因子偏逆风 / unfavorable: 暂停为了回本而摊低成本。"
+    else:
+        macro_conclusion = "四因子混合 / mixed: 保持持仓观察，不做大额低吸。"
+
+    target_rows: List[List[str]] = []
+    for quote in holding_quotes:
+        stock = stock_map.get(quote.ticker)
+        if not stock:
+            continue
+        position = one_year_position_ratio(quote)
+        ratio = volume_ratio(quote)
+        active_selling = quote.daily_pct <= -3 and ratio is not None and ratio >= 1.8
+        low_zone = position is not None and position <= float(settings.get("low_buy_max_1y_position", 0.50))
+        if score >= 3 and low_zone and not active_selling:
+            action = "低吸研究许可：先核对红旗；若卖压衰竭或买方确认，可小额分批。"
+        elif score <= -2:
+            action = "暂停加仓：宏观逆风未解除，不为降低成本而买。"
+        elif active_selling:
+            action = "不接第一刀：主动卖压仍在，等待量价修复。"
+        else:
+            action = "继续持有/观察：等待四因子更一致，或个股基本面催化。"
+        target_rows.append(
+            [
+                f"{stock['name']} ({quote.ticker})",
+                f"5日 {pct_line(quote.five_day_pct)}；{one_year_position_label(quote)}；量 {ratio:.1f}x" if ratio is not None else f"5日 {pct_line(quote.five_day_pct)}；{one_year_position_label(quote)}",
+                trim_text(first_guardrails(stock, 2), 100),
+                action,
+            ]
+        )
+
+    return "\n".join(
+        [
+            settings.get("principle", "中概低吸需要四因子共同改善。"),
+            f"综合评分 / Composite score: {score:+d}/4。{macro_conclusion}",
+            "",
+            markdown_table(["变量", "状态", "数据", "如何解读"], factor_rows),
+            "",
+            markdown_table(["持仓", "位置/量价", "基本面红旗", "操作口径"], target_rows),
+        ]
+    )
+
+
 def history_window_min(quote: Quote, years: int) -> Optional[float]:
     trading_days = 252 * years
     close = quote.close_history.dropna()
@@ -2601,6 +2719,8 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
     if config.get("market_mover_watch", {}).get("send_daily_email", False):
         triggered = True
 
+    china_recovery_section = china_recovery_watch(config, quote_cache)
+
     stock_rows: List[List[str]] = []
     stock_errors: List[str] = []
     for stock in [item for item in config.get("stocks", []) if not item.get("disabled")]:
@@ -2659,7 +2779,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
                 ]
             ]
 
-    has_any_signal = bool(rotation_alerts or stock_rows or stock_errors or indicator_alerts or market_scan_section or elite_reset_section or market_mover_section)
+    has_any_signal = bool(rotation_alerts or stock_rows or stock_errors or indicator_alerts or market_scan_section or elite_reset_section or market_mover_section or china_recovery_section)
 
     lines.append("一、今日结论 / Today's Conclusion")
     lines.append("--------------------------------")
@@ -2672,8 +2792,14 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append(market_mover_section)
         lines.append("")
 
+    if china_recovery_section:
+        lines.append("三、中概持仓四因子 / China Holdings Four-Factor Watch")
+        lines.append("-------------------------------------------------------")
+        lines.append(china_recovery_section)
+        lines.append("")
+
     if rotation_alerts or stock_rows:
-        lines.append("三、可执行信号 / Actionable Signals")
+        lines.append("四、可执行信号 / Actionable Signals")
         lines.append("----------------------------------")
         if stock_rows:
             lines.append(concise_signal_briefs(stock_rows, max_rows=4))
@@ -2684,20 +2810,20 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append("")
 
     if elite_reset_section:
-        lines.append("四、旗舰资产深回撤 / Elite Franchise Deep-Reset Watch")
+        lines.append("五、旗舰资产深回撤 / Elite Franchise Deep-Reset Watch")
         lines.append("---------------------------------------------------------")
         lines.append(elite_reset_section)
         lines.append("")
 
     if market_scan_section:
-        lines.append("五、赛道轮动扫描 / Market Rotation Scan")
+        lines.append("六、赛道轮动扫描 / Market Rotation Scan")
         lines.append("------------------------------------------")
         lines.append(market_scan_section)
         lines.append("")
 
     decision_memos = decision_memos_for_rows(stock_rows, config, quote_cache)
     if decision_memos:
-        lines.append("六、交易前八栏复核 / Pre-Trade Eight-Gate Review")
+        lines.append("七、交易前八栏复核 / Pre-Trade Eight-Gate Review")
         lines.append("---------------------------------------------------")
         lines.append("只对真正触发的机会/强势信号展开。自动数据用于筛查，不替代财报、估值与信用人工核验。")
         lines.append("Expanded only for decision-level signals. Automated data screens for risk; it does not replace earnings, valuation, or credit verification.")
@@ -2707,7 +2833,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
 
     supplemental_stock_rows = top_signal_rows(stock_rows, max_rows=10)[4:] if stock_rows else []
     if supplemental_stock_rows or stock_errors:
-        lines.append("七、补充观察 / Additional Watch")
+        lines.append("八、补充观察 / Additional Watch")
         lines.append("-------------------------------")
         if supplemental_stock_rows:
             lines.append(tight_portfolio_diagnosis(supplemental_stock_rows, max_names=6))
@@ -2726,7 +2852,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
     regime_section = portfolio_regime_table(config, quote_cache) if (rotation_alerts or stock_rows) else ""
 
     if indicator_alerts or geo_section or regime_section:
-        lines.append("八、市场温度 / Market Temperature")
+        lines.append("九、市场温度 / Market Temperature")
         lines.append("--------------------------------")
         if regime_section:
             lines.append(regime_section)
@@ -2744,18 +2870,18 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
 
     omitted_section = not_expanded_today(config, quote_cache, stock_rows)
     if omitted_section:
-        lines.append("九、今天不单独展开 / Not Expanded Today")
+        lines.append("十、今天不单独展开 / Not Expanded Today")
         lines.append("-------------------------------------")
         lines.append(omitted_section)
         lines.append("")
 
     if influencer_rows:
-        lines.append("十、高手雷达 / Influencer Radar")
+        lines.append("十一、高手雷达 / Influencer Radar")
         lines.append("--------------------------------")
         lines.append(influencer_blocks(influencer_rows[:3]))
         lines.append("")
 
-    lines.append("十一、经验提醒 / Experience Reminders")
+    lines.append("十二、经验提醒 / Experience Reminders")
     lines.append("-----------------------------------")
     lines.append(experience_reminders())
     lines.append("")

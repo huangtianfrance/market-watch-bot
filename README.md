@@ -80,6 +80,12 @@ Every daily email includes a top-10 gainers and top-10 losers board drawn from a
 
 This is intentionally not an all-exchange ranking: raw market mover lists are dominated by low-float and low-liquidity names, which do not fit this strategy. The board is a discovery layer. Gainers identify emerging leadership and potential no-chase/trim zones; losers enter the fundamental, credit, and price-volume review process before any purchase is considered.
 
+## China Holdings Four-Factor Watch
+
+PDD, Meituan, and Tencent are also evaluated every day through the four variables that most often determine China-platform risk appetite: U.S. rates, the U.S. dollar, China's earnings cycle, and the China risk premium. The report assigns each variable a directional score and only permits low-buy research when at least three are supportive, the stock remains in the lower half of its one-year range, and the tape is not showing active liquidation.
+
+The earnings-cycle input is explicitly labelled as a market proxy based on the relative action of the holdings. It is not a substitute for actual earnings, GMV, margins, free cash flow, guidance, competition, or regulation checks.
+
 ## External Data Best Practices
 
 The bot is deliberately conservative when calling external data sources:

@@ -120,6 +120,17 @@ The daily leadership board ranks a curated universe of liquid U.S., European, an
 
 It is not a global exchange-wide leaderboard. That would mostly surface penny stocks, small floats, and event-driven noise. The purpose is to discover investable leadership and potential deep resets outside the existing personal list. A place on the board is never a buy or sell instruction.
 
+## China Holdings Four-Factor Protocol
+
+China-platform holdings are controlled by four linked variables:
+
+1. U.S. rates: lower or stabilizing long rates can reduce the valuation pressure on growth and cross-border risk assets.
+2. U.S. dollar: a weaker dollar often improves global risk appetite, but it is not a China-specific guarantee.
+3. China's earnings cycle: PDD, Meituan, and Tencent price action is used only as a short-term market proxy; actual GMV, monetization, margins, FCF, competition, and guidance must be checked at earnings.
+4. China risk premium: KWEB relative to the Hang Seng Index is used as a rough cross-border China-tech risk proxy. Persistent underperformance signals that the premium may still be widening.
+
+The bot scores these factors from -4 to +4. A score of +3 or above permits low-buy research only when a holding remains in the lower half of its one-year range and is not under active high-volume selling. A score of -2 or below pauses averaging down: lowering a cost basis is not an investment thesis.
+
 ## Automation Boundaries
 
 The bot may issue a research or review signal. It never issues an automatic order.

@@ -311,6 +311,23 @@ market_mover_watch:
     - {ticker: 0388.HK, name: Hong Kong Exchanges, region: Hong Kong, style: "Capital-markets infrastructure"}
     - {ticker: 1211.HK, name: BYD, region: Hong Kong, style: "EV/energy-storage leader"}
 
+china_recovery_watch:
+  enabled: true
+  tickers: [PDD, 3690.HK, 0700.HK]
+  dollar_ticker: DX-Y.NYB
+  china_tech_proxy: KWEB
+  china_market_proxy: ^HSI
+  rate_support_5d_change: -1.0
+  rate_risk_5d_change: 1.0
+  dollar_support_5d_pct: -0.5
+  dollar_risk_5d_pct: 0.5
+  earnings_proxy_support_5d_pct: 2.0
+  earnings_proxy_risk_5d_pct: -2.0
+  risk_premium_support_relative_20d_pct: 1.0
+  risk_premium_risk_relative_20d_pct: -1.0
+  low_buy_max_1y_position: 0.50
+  principle: "PDD、美团、腾讯的低吸不是为了机械摊低成本，而是押注美国利率、美元、中国盈利周期和China risk premium同时改善。只有宏观至少三项支持、个股未过热且量价不再显示主动抛售，才进入分批研究。"
+
 global_rules:
   stock_big_up_daily_pct: 5.0
   stock_big_up_5d_pct: 10.0
