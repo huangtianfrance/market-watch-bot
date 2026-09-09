@@ -66,6 +66,22 @@ Every material purchase, add, trim, or rotation must answer the following.
 
 If these cannot be stated clearly, the default decision is no trade.
 
+## Dynamic Valuation Floor
+
+Historical low valuation is a reference point, not a trade instruction. The system should not mechanically say "buy only when the stock returns to the 2022 PE" or "cheap because PE is low." A valuation floor moves when the business, policy environment, capital return, credit conditions, and market structure change.
+
+| Situation | Meaning | Practical rule |
+|---|---|---|
+| Business quality improves versus the old panic period | The old trough multiple may be too harsh | Raise the expected floor and watch for earlier accumulation |
+| Buybacks or dividends become stronger and more credible | There may be a real bid underneath the stock | Treat low-range pullbacks as research candidates sooner |
+| Regulation or geopolitics improves | The risk premium can compress | Do not wait only for historical disaster prices |
+| Earnings quality, margins, or competition worsens | A low PE may be a value trap | Lower the floor or pause averaging down |
+| Credit, funding, or dilution worsens | Per-share value may be impaired even with growth | Require a larger discount and a clearer catalyst |
+
+For Tencent, the 2022 panic multiple is now only a tail-risk reference. If gaming, ads, video accounts, fintech/cloud, buybacks, and regulation remain healthier than in 2022, the reasonable floor should sit above the old panic floor. The preferred signal is therefore not a fixed price near the historical trough; it is a lower-range pullback with seller exhaustion, intact fundamentals, and China risk premium improvement.
+
+For PDD, low PE is more dangerous to read in isolation. The discount may be real opportunity, but it also reflects Temu, tariffs, regulation, margin pressure, and China consumption. The bot should only permit low-buy research when the China four-factor score improves and price-volume no longer shows active liquidation.
+
 ## Price-Volume Protocol
 
 The bot treats price-volume as evidence of flow, not as a substitute for business analysis.

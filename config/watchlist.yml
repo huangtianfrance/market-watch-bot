@@ -4,6 +4,11 @@ portfolio:
   send_email_when_no_alerts: false
   report_mode: alerts_only
   language: zh_en
+  objective: "以约€10,000的小资金账户，在12个月窗口争取增长至约€20,000；目标激进，但不以无上限杠杆、频繁交易或基本面破坏后的摊平换取账面收益。"
+  target_horizon_months: 12
+  target_return_pct: 100
+  preferred_min_trade_eur: 1000
+  execution_style: "长期观察、低频决策；集中于少数高赔率机会，分批建仓、分批止盈，保留恐慌期现金。"
 
 data_fetch:
   provider: Yahoo Finance via yfinance
@@ -72,6 +77,7 @@ trading_framework:
   contrarian_lens: "Keith Gill: allow contrarian concentration only after deep research, clear mispricing, and a credible re-rating path; do not let one thesis dominate the whole account."
   risk_lens: "Oliver Kell: define invalidation and stop discipline before discussing profit targets; if the thesis breaks, exit instead of averaging down emotionally."
   sizing_note: "For high-volatility ideas, prefer staged entries and small tranches. A signal is a research trigger, not an automatic trade order."
+  recent_upgrade: "2026-09 upgrade: valuation floors must be dynamic. Historical trough PE is an extreme-stress reference, not a mechanical buy price. Recalculate the floor from current earnings quality, buybacks, regulation, flow, rates, credit and risk premium."
   decision_gates:
     - "基本面 / Fundamentals: forward revenue, EPS, FCF, margin, orders and market share are not deteriorating materially."
     - "资本结构 / Capital structure: growth must justify capex, financing cost and dilution; prioritize incremental ROIC over headline growth."
@@ -91,6 +97,11 @@ trading_framework:
     - "财报中的收入、指引、订单、FCF或利润率变化"
     - "利率/信用条件改善，或政策和监管转向"
     - "回购、产品周期、产能/CapEx拐点、投资者日"
+  dynamic_valuation_rules:
+    - "历史极端恐慌估值只代表尾部情景；不能用它机械倒推出常规买点。"
+    - "如果经营质量、现金流、回购、行业地位或监管环境优于历史低点时期，估值底应上移。"
+    - "如果盈利预期、竞争格局、信用条件或政策风险弱于历史低点时期，低PE也可能是价值陷阱。"
+    - "每个低吸信号都必须同时说明一年区间位置、PE/FCF是否合理、成交量是否显示卖压衰竭，以及失效条件。"
 
 advisor_research:
   enabled: true
@@ -493,9 +504,10 @@ stocks:
 
   - name: Meta
     ticker: META
-    position: 0
-    currency: USD
-    notes: "Watchlist: AI ads + social platforms; high quality but sentiment can swing on capex."
+    position: 4
+    cost_basis: 465.15
+    currency: EUR
+    notes: "Current holding: AI ads + social platforms; high quality but sentiment can swing on capex."
     rotation:
       role: watchlist
       allow_as_target_when_not_held: true
@@ -551,7 +563,7 @@ stocks:
 
   - name: Airbus
     ticker: AIR.PA
-    position: 12
+    position: 6
     cost_basis: 191.54
     currency: EUR
     notes: "Core swing-trading holding. Trim on strength; alert on sharp pullback if fundamentals remain intact."
@@ -586,7 +598,7 @@ stocks:
 
   - name: Oracle
     ticker: ORCL
-    position: 27
+    position: 17
     cost_basis: 119.56
     currency: EUR
     notes: "High-risk AI infrastructure rebound holding. Watch debt, FCF, capex, Fed path."
@@ -722,6 +734,7 @@ stocks:
     cost_basis: 101.60
     currency: EUR
     notes: "High-volatility China e-commerce exposure."
+    latest_framework_note: "Dynamic PE read: current low valuation is real, but the discount reflects Temu, margins, tariffs/regulation and China consumption. Do not average down just because PE is low; require China four-factor improvement, stable earnings expectations and no active high-volume liquidation."
     entry_alert:
       enabled: true
       daily_drop_pct: -8.0
@@ -750,6 +763,13 @@ stocks:
         near_low_years: 1
         near_low_tolerance_pct: 6.0
         max_5d_pct: -10.0
+      dynamic_valuation:
+        historical_low_pe_is_reference_only: true
+        preferred_first_research_zone_usd: "72-75"
+        stronger_research_zone_usd: "65-70"
+        no_chase_zone_usd: "95-105"
+        thesis: "Low PE is not enough. The thesis needs GMV, margins, Temu risk, regulation, buybacks and FCF to stabilize."
+        invalidation: "Pause averaging down if revenue growth, margins or cross-border policy risk keeps worsening."
       fundamental_guardrail:
         red_flags:
           - "Temu or PDD revenue growth decelerates materially"
@@ -1090,9 +1110,10 @@ stocks:
 
   - name: Broadcom
     ticker: AVGO
-    position: 0
-    currency: USD
-    notes: "Priority entry watch: AI networking/custom silicon + software. Alert on sharp selloff if fundamentals remain intact."
+    position: 5
+    cost_basis: 309.20
+    currency: EUR
+    notes: "Current holding: AI networking/custom silicon + software. Alert on sharp selloff if fundamentals remain intact."
     advisor_profile:
       capital_profile: picks_and_shovels
       valuation_question: "AI收入、客户CapEx和毛利率预期是否被错误下修；不以单日超跌代替估值判断。"
@@ -1256,7 +1277,8 @@ stocks:
     position: 1
     cost_basis: 35.03
     currency: EUR
-    notes: "Residual observation position after successful prior trade. Alert on deep pullback if China platform thesis and buyback support remain intact."
+    notes: "Residual observation position after successful prior trade. Alert on deep pullback if China platform thesis and buyback support remain intact. Use dynamic valuation floor; do not mechanically wait for 2022 panic PE."
+    latest_framework_note: "Tencent valuation floor should be dynamic and likely higher than 2022 panic levels if gaming, ads, fintech/cloud, buybacks and regulation remain healthier than in 2022. Treat 10-11x PE as tail-risk reference, not the base entry plan."
     entry_alert:
       enabled: true
       daily_drop_pct: -6.0
@@ -1272,6 +1294,18 @@ stocks:
         near_low_years: 1
         near_low_tolerance_pct: 5.0
         max_5d_pct: -8.0
+      dynamic_valuation:
+        historical_panic_pe_is_reference_only: true
+        current_floor_logic: "If business quality, buyback support and regulation are better than the 2022 panic period, the fair valuation floor should move higher."
+        observe_zone_hkd: "430-440"
+        first_research_zone_hkd: "410-420"
+        preferred_research_zone_hkd: "390-405"
+        extreme_panic_zone_hkd: "360-380"
+        tail_risk_reference_hkd: "345-365"
+        trim_zone_1_hkd: "480-500"
+        trim_zone_2_hkd: "540-560"
+        thesis: "Low-buy only if gaming, ads, fintech/cloud, buybacks and China regulation remain intact."
+        invalidation: "Pause low-buy research if core growth weakens, buybacks slow sharply without explanation, or regulation again impairs profit."
       fundamental_guardrail:
         red_flags:
           - "Gaming, ads, fintech or cloud growth materially weakens"

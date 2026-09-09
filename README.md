@@ -52,6 +52,10 @@ The eight-gate table deliberately separates what automated data can observe (pri
 
 The framework recognizes several capital profiles. Cash compounders such as Microsoft and Tencent are judged by whether AI improves an existing cash machine. AI picks-and-shovels such as Broadcom are judged by demand, margins, customer capex, and crowding. Capital-intensive AI stories such as Oracle must prove that AI revenue growth exceeds capex, financing cost, and dilution over time. Banks are evaluated through capital, credit cost, and sovereign/credit risk, rather than PE alone.
 
+The current operating objective is a small, concentrated account trying to compound aggressively over a 12-month window without turning one wrong thesis into permanent damage. The bot therefore treats every signal as a research trigger, not an automatic order. It favors a few high-odds rotations, staged entries, staged profit-taking, and cash reserved for genuine panic.
+
+Valuation floors are dynamic. Historical trough PE is used as a stress reference only. For Tencent, 2022-style panic valuation should not be treated as the base-case buy zone if gaming, advertising, fintech/cloud, buybacks, and regulation are materially healthier now. For PDD, a low PE needs stricter proof because Temu, margins, tariffs/regulation, and China consumption can make a cheap-looking multiple a value trap.
+
 The complete project mandate, portfolio architecture, research profiles for the watchlist, capital-cycle lens, price-volume protocol, and automation boundaries are documented in [Investment Operating System](docs/INVESTMENT_OPERATING_SYSTEM.md).
 
 ## Market Rotation Scan
