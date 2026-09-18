@@ -5,12 +5,27 @@ A lightweight cloud-ready stock alert bot for a low-frequency, panic-buy / stren
 It checks your watchlist on a schedule and emails you when a rule is triggered:
 
 - a held stock rises sharply
-- VIX reaches extreme fear or extreme greed / complacency
+- CNN Fear & Greed and VIX jointly raise the daily dip-buy readiness rating
 - Crypto Fear & Greed reaches extreme fear or extreme greed
 - a held stock trades near its 1-year, 3-year, or 5-year low
 - a possible market-confirmed fundamental re-rating appears, defined as a strong positive price move with unusual volume
 
 The report is intentionally alert-only and bilingual Chinese/English. It does not send routine portfolio summaries unless `send_email_when_no_alerts` is set to `true`.
+
+## Market Sentiment Decision Matrix
+
+Every report combines CNN Fear & Greed with VIX into a `1-10` **dip-buy readiness** rating. VIX is the primary trigger because it reflects the price of roughly 30-day S&P 500 option protection; CNN is the confirmation layer because it combines breadth, momentum, credit, safe-haven demand, and other market signals.
+
+| VIX | Rating baseline | Default decision |
+|---:|---:|---|
+| `< 17` | `3/10` | No panic discount; do not chase |
+| `17-19.9` | `5/10` | Caution rising; research only |
+| `20-24.9` | `7/10` | Prepare cash and a buy list; wait for stock-level stabilization |
+| `25-29.9` | `8/10` | Material fear; a very small first tranche may be reviewed |
+| `30-39.9` | `9/10` | High-priority golden-pit scan |
+| `>= 40` | `10/10` | Extreme panic; review staged entries immediately |
+
+CNN `<= 24` adds confirmation and can raise the rating by one point. The rating is not a claim that the market has bottomed and never creates an automatic order. Before any entry, revenue/orders, margins, free cash flow, debt/credit, competitive position, and stock-specific price-volume behavior must remain intact.
 
 ## Email Style
 
@@ -54,6 +69,8 @@ The framework recognizes several capital profiles. Cash compounders such as Micr
 
 The current operating objective is a small, concentrated account trying to compound aggressively over a 12-month window without turning one wrong thesis into permanent damage. The bot therefore treats every signal as a research trigger, not an automatic order. It favors a few high-odds rotations, staged entries, staged profit-taking, and cash reserved for genuine panic.
 
+The highest-priority opportunity type is now the **blue-chip golden pit**: a large, durable franchise wrongly sold off by macro, rates, regulation, AI capex fear, cyclicality, or short-term narrative pressure while leading indicators remain intact. The standing watchlist is MSFT, META, GOOGL, AMZN, AVGO, NVDA, AAPL, UNH, ASML, Airbus, LVMH, SAP, Schneider, Safran, Tencent, Alibaba, and Meituan. Oracle is tracked separately because it has blue-chip scale but must pass extra debt, CapEx, FCF, credit, and customer-concentration checks. SpaceX/SPCX is tracked as a listed special case: the bot must ignore legacy `SPCX` history before the June 12, 2026 IPO and evaluate AI compute CapEx, contract cancellability, debt cost, Starlink cash flow, launch/government contracts, power/cooling/permits, and data-center reliability.
+
 Valuation floors are dynamic. Historical trough PE is used as a stress reference only. For Tencent, 2022-style panic valuation should not be treated as the base-case buy zone if gaming, advertising, fintech/cloud, buybacks, and regulation are materially healthier now. For PDD, a low PE needs stricter proof because Temu, margins, tariffs/regulation, and China consumption can make a cheap-looking multiple a value trap.
 
 The complete project mandate, portfolio architecture, research profiles for the watchlist, capital-cycle lens, price-volume protocol, and automation boundaries are documented in [Investment Operating System](docs/INVESTMENT_OPERATING_SYSTEM.md).
@@ -76,7 +93,7 @@ The bot separately monitors deep resets in the Magnificent Seven, memory/HBM lea
 
 The default universe includes Apple, Microsoft, Alphabet, Amazon, Meta, Tesla, Nvidia, SK Hynix, Samsung, Micron, Broadcom, and Marvell. Each group has its own required fundamental checks. For example, memory leaders require HBM share, DRAM/NAND pricing, inventory, and capex discipline to remain intact; AI leaders require hyperscaler capex, order visibility, margin, customer concentration, and FCF checks.
 
-SpaceX remains a manual private-market watch. The bot will not use `SPCX` or another unofficial ticker as if it were a public-market quote.
+SpaceX is now monitored through the official `SPCX` listing. The bot treats it as a special listed asset because `SPCX` had legacy pre-IPO ticker history; any drawdown, one-year range, or historical-low signal should use only post-IPO data beginning June 12, 2026.
 
 ## Global Leadership Movers
 
@@ -99,6 +116,7 @@ The bot is deliberately conservative when calling external data sources:
 - failed requests are retried with backoff
 - Yahoo Finance calls run with `threads=False` to reduce bursty behavior
 - Crypto Fear & Greed calls include a simple user agent
+- CNN Fear & Greed uses CNN's JSON data endpoint with paced requests, retry/backoff, freshness checks, and browser-compatible request headers
 - each email includes a concise data quality summary
 
 The data quality section shows:
@@ -121,7 +139,7 @@ This helps distinguish a strong investment signal from a weak signal caused by b
 
 For watchlist-only names, ordinary rallies are ignored. The bot focuses on buy-relevant signals such as being near historical lows, sharp selloffs, or market-confirmed fundamental re-ratings.
 
-Private companies such as SpaceX are marked `disabled: true` because there is no reliable public ticker for automatic Yahoo Finance monitoring.
+Newly listed names with reused tickers, especially SpaceX/SPCX, require data-quality checks. If a ticker existed before the current issuer's IPO, the bot should ignore pre-IPO history when interpreting drawdowns, lows, and long-range performance.
 
 ## Default Alert Rules
 
@@ -135,6 +153,9 @@ The default rules in `config/watchlist.yml` are tuned for low-frequency investin
 | Near-low tolerance | within `2%` of the low |
 | Market-confirmed re-rating | `+8%` day or `+15%` over 5 days, plus `2x` 20-day average volume |
 | VIX extreme fear | `>= 30` |
+| VIX dip-buy preparation | `>= 20` |
+| CNN Fear & Greed fear | `<= 44` |
+| CNN Fear & Greed extreme fear | `<= 24` |
 | VIX extreme greed / complacency | `<= 12` |
 | Crypto Fear & Greed fear watch | `<= 25` |
 | Crypto Fear & Greed extreme fear | `<= 15` |

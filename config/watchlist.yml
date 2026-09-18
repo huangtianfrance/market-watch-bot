@@ -73,6 +73,7 @@ trading_framework:
   enabled: true
   title: "Mispricing and capital-cycle framework v2"
   core_principle: "在长期结构性趋势里，寻找由资金流、信用周期和市场叙事造成的错误定价；只在基本面未破、卖压衰竭或买方确认、且存在催化剂时行动。"
+  highest_priority: "蓝筹黄金坑是最高优先级：优先寻找MSFT、META、GOOGL、AMZN、AVGO、NVDA、AAPL、UNH、ASML、Airbus、LVMH、SAP、Schneider、Safran、Tencent、Alibaba、Meituan等大公司/龙头被市场错判后的深度回撤；ORCL单独看债务/CapEx/信用风险；SpaceX/SPCX单独看AI算力CapEx、债务、合同可取消性、Starlink现金流、发射/政府合同和数据中心执行风险。只有当基本面和先行指标未坏、价格给出足够折扣、资金流出现卖压衰竭时，才允许给有意义仓位。"
   trend_leader_lens: "Minervini / David Ryan: judge the main theme, relative strength, leadership, volume confirmation, and whether the stock is being accumulated by real money."
   contrarian_lens: "Keith Gill: allow contrarian concentration only after deep research, clear mispricing, and a credible re-rating path; do not let one thesis dominate the whole account."
   risk_lens: "Oliver Kell: define invalidation and stop discipline before discussing profit targets; if the thesis breaks, exit instead of averaging down emotionally."
@@ -87,6 +88,19 @@ trading_framework:
     - "催化剂 / Catalyst: require a dated or observable path such as earnings, orders, FCF inflection, buybacks, policy or rate change."
     - "失效条件 / Invalidation: write the facts that prove the thesis wrong before entry; do not average down after a thesis break."
     - "仓位 / Position: size by expected return x probability versus downside; use core, convexity and cash buckets."
+
+market_sentiment_framework:
+  enabled: true
+  purpose: "每天联合解读CNN Fear & Greed与VIX，输出低吸准备度。VIX是主触发器，CNN用于确认；评级不是自动买入指令。"
+  cnn_fear_greed:
+    fear_below: 44
+    extreme_fear_below: 24
+  vix:
+    prepare_above: 20
+    fear_above: 25
+    golden_pit_above: 30
+    extreme_panic_above: 40
+  fundamental_gate: "强制：只有收入/订单、利润率、FCF、债务/信用、竞争地位和关键先行指标没有实质恶化，才允许把恐慌当作低吸机会。"
   default_capital_profiles:
     cash_compounder: "内部现金流支持AI投入；重点看AI是否提升原有现金机器效率。"
     picks_and_shovels: "AI需求的直接受益者；重点看订单、毛利率、客户CapEx和估值拥挤度。"
@@ -107,6 +121,7 @@ advisor_research:
   enabled: true
   mandate: "不是预测每天涨跌，而是在长期主线中识别基本面、资金流、信用周期和叙事之间的错误定价；用等待、分批与失效纪律提高赔率。"
   portfolio_architecture:
+    blue_chip_golden_pit: "最高优先级；大盘龙头/蓝筹被宏观、监管、AI CapEx、周期或短期业绩误读错杀，但现金流、竞争地位和先行指标未坏时，可给比高弹性小票更有意义的仓位。"
     core: "现金流强、可低频复利的龙头；优先腾讯、MSFT及高质量AI卖铲人。"
     convexity: "只用于可出现50-100%重估的高波动逻辑，如Oracle、BTC或严格回撤后的AI龙头；总组合10-15%。"
     swing: "Airbus、ADP等质量周期股；利用估值与情绪波动做10-20%波段，不把它们当无限期追涨仓。"
@@ -200,6 +215,26 @@ advisor_research:
       credit: "高；市场流动性收紧时估值和融资能力会同时受压。"
       valuation: "不以低价判断便宜；先定义情景概率和最大可承受亏损。"
       catalysts: ["明确商业化/交付验证", "融资风险下降", "政策节点", "强势量价确认"]
+  blue_chip_golden_pit:
+    enabled: true
+    priority: 1
+    principle: "小资金账户的第一策略不是寻找下一个十倍小票，而是等待高质量蓝筹/龙头被错误定价，然后在失效条件清晰时敢给仓位。"
+    preferred_universe:
+      us: [MSFT, META, GOOGL, AMZN, AVGO, NVDA, AAPL, UNH]
+      europe: [ASML.AS, AIR.PA, MC.PA, SAP.DE, SU.PA, SAF.PA]
+      hong_kong: [0700.HK, 9988.HK, 3690.HK]
+      special_review: [ORCL, SpaceX]
+    special_review_note: "ORCL有蓝筹规模和AI云弹性，但介于蓝筹和高风险AI资本周期之间；所有买入/加仓信号必须额外复核债务、CapEx、FCF、信用评级、客户集中和OpenAI/大客户合同质量。SpaceX/SPCX已上市，但属于AI算力CapEx、Starlink、发射、政府合同和未来轨道数据中心混合资产；必须额外复核IPO后现金消耗、AI数据中心CapEx/AI收入、客户合同可取消性、债务利率、电力/冷却/许可、Starship执行和旧SPCX代码历史数据污染。"
+    eligible_patterns:
+      - "大公司/龙头因宏观利率、油价、监管、AI放缓、短期指引或周期恐慌被错杀。"
+      - "收入、利润率、FCF、订单、回购或市场份额等先行指标没有同步恶化。"
+      - "回撤幅度达到该股票自身历史常见深回撤区，而不是统一套用15%-25%。"
+      - "出现卖压衰竭：二次回踩不破前低、坏消息后不再创新低，或上涨日放量。"
+    sizing_guidance:
+      meaningful_tranche: "真正符合条件的蓝筹黄金坑，可考虑15%-25%账户级别的有意义仓位，并分批执行。"
+      high_beta_limit: "COHR、VRT、MU等高弹性主线可以作为增强仓，但首笔通常低于蓝筹黄金坑；不能把小票当核心重仓。"
+      avoid: "CRWV、NBIS等高杠杆/客户集中/融资依赖标的，即使跌幅够，也不自动进入黄金坑。"
+    invalidation: "如果先行指标恶化、信用/融资风险上升、利润率或订单被证伪，停止用蓝筹标签自我安慰，暂停加仓并重新评估。"
 
 market_scan:
   enabled: true
@@ -262,9 +297,11 @@ elite_franchise_reset_watch:
     - name: AI核心卖铲人 / AI franchise leaders
       tickers: [NVDA, AVGO, MRVL]
       required_checks: "Hyperscaler CapEx、订单/积压订单、定制芯片与网络需求、毛利率、客户集中度和FCF。"
-  private_company_manual_watch:
+  listed_special_watch:
     name: SpaceX
-    note: "SpaceX无可靠公开股票代码；只在私募估值显著下修、二级份额折价扩大，或火箭发射/Starlink/政府合同基本面发生重大变化时人工复核，绝不把SPCX等非官方代码当行情。"
+    ticker: SPCX
+    ipo_date: "2026-06-12"
+    note: "SpaceX/SPCX已上市。所有价格、回撤和一年区间计算只能使用2026-06-12 IPO之后的数据；Nasdaq提示旧SPCX历史数据不得与当前SpaceX连接。重点核对AI算力CapEx、AI收入、合同可取消性、债务利率、Starlink现金流、发射/政府合同、电力/冷却/许可和数据中心可靠性。"
 
 market_mover_watch:
   enabled: true
@@ -453,9 +490,19 @@ stocks:
   - name: SpaceX
     ticker: SPCX
     position: 0
-    disabled: true
+    disabled: false
     currency: USD
-    notes: "Private company. Do not use SPCX as a reliable SpaceX price feed; monitor manually or via private-market marks."
+    history_start: "2026-06-12"
+    notes: "Listed June 12, 2026. Official ticker SPCX; ignore pre-IPO legacy SPCX history. Special watch: AI compute CapEx + Starlink + launch/government contracts + debt/electricity/data-center execution."
+    rotation:
+      role: watchlist
+      allow_as_target_when_not_held: true
+      fundamental_guardrail:
+        red_flags:
+          - "AI compute CapEx grows faster than AI revenue, EBITDA, or contracted backlog"
+          - "Major compute contracts prove highly cancellable or utilization weakens"
+          - "Debt cost, power availability, cooling, permitting, or data-center reliability deteriorates"
+          - "Starship, Starlink, government contracts, or launch cadence weakens materially"
 
   - name: LVMH
     ticker: MC.PA
@@ -1381,6 +1428,14 @@ market_indicators:
       extreme_greed_above: 80
     notes: "Hard notification signal. Extreme fear may fit BTC accumulation watch. Extreme greed may fit patience or trimming discipline."
 
+  - name: CNN Fear & Greed
+    type: cnn_fear_greed
+    ticker: CNN_FNG
+    rules:
+      fear_below: 44
+      extreme_fear_below: 24
+    notes: "Broad U.S. equity sentiment confirmation. Combined with VIX; never used as a standalone automatic buy signal."
+
   - name: BlackRock Bitcoin ETF
     ticker: IBIT
     rules:
@@ -1426,9 +1481,12 @@ market_indicators:
   - name: VIX
     ticker: ^VIX
     rules:
+      prepare_above: 20
+      fear_above: 25
       extreme_fear_above: 30
+      extreme_panic_above: 40
       extreme_greed_below: 12
-    notes: "Extreme fear may fit panic-buy watch. Extreme greed may fit strength-selling discipline."
+    notes: "Primary dip-buy readiness trigger. >=20 means prepare; >=30 starts a high-priority golden-pit scan, subject to intact fundamentals."
 
   - name: US 10Y Yield
     ticker: ^TNX

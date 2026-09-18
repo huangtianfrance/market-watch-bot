@@ -55,6 +55,7 @@ ROTATION_TARGET_TICKERS: Set[str] = set()
 NEWS_CHECK_CACHE: Dict[str, str] = {}
 INFLUENCER_CHECK_CACHE: Dict[str, str] = {}
 ROTATION_PAIR_CONTEXT: List[Tuple[str, str, str, str]] = []
+HISTORY_START_BY_TICKER: Dict[str, str] = {}
 FETCH_SETTINGS: Dict[str, Any] = {
     "request_pause_seconds": 0.7,
     "max_retries": 3,
@@ -88,6 +89,10 @@ def load_config(path: str) -> Dict[str, Any]:
     FETCH_SETTINGS.update(config.get("data_fetch", {}))
     NEWS_SEARCH_SETTINGS.update(config.get("news_search", {}))
     INFLUENCER_WATCH_SETTINGS.update(config.get("influencer_watch", {}))
+    HISTORY_START_BY_TICKER.clear()
+    for stock in config.get("stocks", []):
+        if stock.get("history_start"):
+            HISTORY_START_BY_TICKER[str(stock.get("ticker"))] = str(stock.get("history_start"))
     return config
 
 
@@ -245,8 +250,26 @@ def fetch_quote(ticker: str) -> Quote:
 
     close = data["Close"].dropna()
     volume = data["Volume"].dropna() if "Volume" in data.columns else None
+    cutoff = HISTORY_START_BY_TICKER.get(ticker)
+    if cutoff:
+        close = close[close.index >= cutoff]
+        if volume is not None:
+            volume = volume[volume.index >= cutoff]
+        if len(close) < 2:
+            quality = DataQuality(
+                source="Yahoo Finance/yfinance",
+                symbol=ticker,
+                status="failed",
+                rows=len(close),
+                attempts=attempt,
+                warnings=[f"按{cutoff}裁剪后数据不足 / insufficient data after history_start"],
+            )
+            log_quality(quality)
+            raise ValueError(f"No usable post-history_start price data returned for {ticker}")
     latest_date, freshness_days = data_latest_date_and_freshness(close)
     warnings: List[str] = []
+    if cutoff:
+        warnings.append(f"历史数据按{cutoff}之后计算 / history clipped from {cutoff}")
     if len(close) < int(FETCH_SETTINGS.get("min_history_rows", 60)):
         warnings.append("历史数据偏少 / limited history")
     stale_after = int(FETCH_SETTINGS.get("stale_after_calendar_days", 7))
@@ -355,6 +378,87 @@ def fetch_crypto_fear_greed() -> SentimentIndex:
         value=int(item["value"]),
         classification=item["value_classification"],
         timestamp=item.get("timestamp", ""),
+        quality=quality,
+    )
+
+
+def fetch_cnn_fear_greed() -> SentimentIndex:
+    url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+    attempts = int(FETCH_SETTINGS.get("max_retries", 3))
+    backoff = float(FETCH_SETTINGS.get("retry_backoff_seconds", 2.0))
+    pause = float(FETCH_SETTINGS.get("request_pause_seconds", 0.7))
+    last_error: Optional[Exception] = None
+    payload = None
+    for attempt in range(1, attempts + 1):
+        if pause > 0:
+            time.sleep(pause)
+        try:
+            request = urllib.request.Request(
+                url,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/140.0.0.0 Safari/537.36"
+                    ),
+                    "Accept": "application/json, text/plain, */*",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Origin": "https://edition.cnn.com",
+                    "Referer": "https://edition.cnn.com/markets/fear-and-greed",
+                },
+            )
+            with urllib.request.urlopen(request, timeout=20) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt < attempts:
+                time.sleep(backoff * attempt)
+
+    if payload is None:
+        quality = DataQuality(
+            source="CNN Fear & Greed JSON endpoint",
+            symbol="CNN_FNG",
+            status="failed",
+            attempts=attempts,
+            warnings=["CNN市场情绪指数获取失败 / CNN sentiment fetch failed"],
+            error=str(last_error) if last_error else "unknown error",
+        )
+        log_quality(quality)
+        raise ValueError(f"CNN Fear & Greed fetch failed: {quality.error}")
+
+    item = payload.get("fear_and_greed", {})
+    if item.get("score") is None:
+        raise ValueError("CNN Fear & Greed response does not contain fear_and_greed.score")
+
+    warnings: List[str] = []
+    timestamp = str(item.get("timestamp", ""))
+    freshness_days = None
+    if timestamp:
+        try:
+            ts_dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            freshness_days = (datetime.now(timezone.utc).date() - ts_dt.date()).days
+            if freshness_days > int(FETCH_SETTINGS.get("stale_after_calendar_days", 7)):
+                warnings.append("CNN情绪指数可能偏旧 / stale CNN sentiment data")
+        except Exception:
+            warnings.append("无法解析CNN情绪指数时间戳 / CNN timestamp parse failed")
+
+    quality = DataQuality(
+        source="CNN Fear & Greed JSON endpoint",
+        symbol="CNN_FNG",
+        status="ok" if not warnings else "warning",
+        rows=1,
+        latest_date=timestamp or "n/a",
+        freshness_days=freshness_days,
+        attempts=attempt,
+        warnings=warnings,
+    )
+    log_quality(quality)
+    return SentimentIndex(
+        name="CNN Fear & Greed",
+        value=int(round(float(item["score"]))),
+        classification=str(item.get("rating", "unknown")).title(),
+        timestamp=timestamp,
         quality=quality,
     )
 
@@ -985,8 +1089,21 @@ def grouped_stock_sections(rows: List[List[str]]) -> List[Tuple[str, str, List[L
     return sections
 
 
-def executive_summary(rotation_alerts: List[str], stock_rows: List[List[str]], indicator_alerts: List[str]) -> str:
+def executive_summary(
+    rotation_alerts: List[str],
+    stock_rows: List[List[str]],
+    indicator_alerts: List[str],
+    sentiment_decision: Optional[Dict[str, Any]] = None,
+) -> str:
     rows: List[List[str]] = []
+    if sentiment_decision and sentiment_decision["rating"] >= 7:
+        rows.append(
+            [
+                "市场情绪",
+                f"低吸准备度 {sentiment_decision['rating']}/10：{sentiment_decision['state']}",
+                sentiment_decision["action_short"],
+            ]
+        )
     if rotation_alerts:
         rows.append(["调仓", "有轮动候选触发", "只进入人工复核，不直接下单。"])
     if any("held strength" in row[1] or "持仓大涨" in row[1] for row in stock_rows):
@@ -1487,6 +1604,7 @@ def framework_summary(config: Dict[str, Any]) -> str:
             "- 逆向下注：用 Keith Gill 的精神做深度研究，只在基本面没死、市场可能重新定价时允许集中，但不能让单一故事失控。",
             "- 风险纪律：用 Oliver Kell 的纪律先定义失效条件和退出规则，再谈盈利目标。",
             f"- 核心原则：{framework.get('core_principle', '')}",
+            f"- 最高优先级：{framework.get('highest_priority', '优先寻找高质量蓝筹/龙头被错杀后的黄金坑，再考虑高弹性小票。')}",
         ]
     )
 
@@ -1889,13 +2007,13 @@ def elite_franchise_reset_watch(config: Dict[str, Any], quote_cache: Dict[str, Q
     if not rows:
         return "", False
     rows = rows[: int(settings.get("max_candidates_per_email", 4))]
-    private_note = settings.get("private_company_manual_watch", {}).get("note", "")
+    special_note = settings.get("listed_special_watch", {}).get("note", "")
     lines = [
         settings.get("principle", "旗舰资产大跌是研究机会，不是自动加仓理由。"),
         markdown_table(["类别", "标的", "回撤/量价", "阶段", "必须核对", "建议"], rows),
     ]
-    if private_note:
-        lines.extend(["", f"SpaceX人工观察：{private_note}"])
+    if special_note:
+        lines.extend(["", f"SpaceX/SPCX专项观察：{special_note}"])
     return "\n".join(lines), True
 
 
@@ -2442,6 +2560,108 @@ def sentiment_snapshot(sentiment: SentimentIndex) -> str:
     return f"数值/Value: {sentiment.value}; 状态/Classification: {sentiment.classification}"
 
 
+def market_sentiment_decision(
+    config: Dict[str, Any],
+    cnn_sentiment: Optional[SentimentIndex],
+    vix_quote: Optional[Quote],
+) -> Dict[str, Any]:
+    settings = config.get("market_sentiment_framework", {})
+    vix_rules = settings.get("vix", {})
+    cnn_rules = settings.get("cnn_fear_greed", {})
+    vix = vix_quote.last if vix_quote else None
+    cnn = cnn_sentiment.value if cnn_sentiment else None
+
+    prepare = float(vix_rules.get("prepare_above", 20))
+    fear = float(vix_rules.get("fear_above", 25))
+    golden_pit = float(vix_rules.get("golden_pit_above", 30))
+    extreme_panic = float(vix_rules.get("extreme_panic_above", 40))
+    cnn_fear = int(cnn_rules.get("fear_below", 44))
+    cnn_extreme_fear = int(cnn_rules.get("extreme_fear_below", 24))
+
+    if vix is None:
+        rating = 5 if cnn is not None and cnn <= cnn_extreme_fear else 3
+        state = "VIX缺失，评级不完整 / VIX unavailable"
+    elif vix >= extreme_panic:
+        rating = 10
+        state = "极端恐慌 / extreme panic"
+    elif vix >= golden_pit:
+        rating = 9
+        state = "高概率黄金坑扫描区 / golden-pit scan"
+    elif vix >= fear:
+        rating = 8
+        state = "明显恐慌 / material fear"
+    elif vix >= prepare:
+        rating = 7
+        state = "抄底准备区 / dip-buy preparation"
+    elif vix >= 17:
+        rating = 5
+        state = "谨慎升温 / caution rising"
+    else:
+        rating = 3
+        state = "尚未恐慌 / no options panic"
+
+    if cnn is not None and cnn <= cnn_extreme_fear and rating < 10:
+        rating += 1
+    elif cnn is not None and cnn <= cnn_fear and vix is not None and vix < prepare:
+        rating = max(rating, 5)
+
+    if rating >= 10:
+        action_short = "立即审查黄金坑清单；通过基本面闸门后分三批，不一次满仓。"
+    elif rating >= 9:
+        action_short = "启动黄金坑审查；只买基本面未坏且卖压趋弱的龙头。"
+    elif rating >= 8:
+        action_short = "允许极小首批试仓；先确认坏消息不再制造新低。"
+    elif rating >= 7:
+        action_short = "准备现金和买入清单；等待个股止跌或买方放量确认。"
+    elif cnn is not None and cnn <= cnn_fear:
+        action_short = "广度偏弱但期权未恐慌；研究候选，不启动普遍抄底。"
+    else:
+        action_short = "没有恐慌折价，不追高，继续等待。"
+
+    cnn_text = "获取失败 / unavailable"
+    if cnn_sentiment:
+        cnn_text = f"{cnn_sentiment.value} ({cnn_sentiment.classification})"
+    vix_text = "获取失败 / unavailable" if vix is None else f"{vix:.2f}"
+    confirmation = "未形成双重恐慌确认 / not jointly confirmed"
+    if cnn is not None and cnn <= cnn_extreme_fear and vix is not None and vix >= prepare:
+        confirmation = "CNN极度恐慌 + VIX>=20，双重确认 / jointly confirmed"
+    elif cnn is not None and cnn <= cnn_fear and vix is not None and vix >= prepare:
+        confirmation = "CNN恐慌 + VIX>=20，方向确认 / direction confirmed"
+    elif vix is not None and vix >= golden_pit:
+        confirmation = "VIX已触发黄金坑扫描，CNN未同步确认 / VIX trigger only"
+
+    return {
+        "rating": min(rating, 10),
+        "state": state,
+        "action_short": action_short,
+        "cnn_text": cnn_text,
+        "vix_text": vix_text,
+        "confirmation": confirmation,
+        "triggered": rating >= 7 or (cnn is not None and cnn <= cnn_extreme_fear),
+    }
+
+
+def market_sentiment_section(decision: Dict[str, Any]) -> str:
+    table = markdown_table(
+        ["CNN Fear & Greed", "VIX", "低吸准备度", "联合判断", "今日动作"],
+        [[
+            decision["cnn_text"],
+            decision["vix_text"],
+            f"{decision['rating']}/10",
+            f"{decision['state']}；{decision['confirmation']}",
+            decision["action_short"],
+        ]],
+    )
+    explanation = (
+        "口径：CNN反映市场广度、动量、信用与避险等综合情绪；VIX反映未来约30天标普500期权保护的价格。"
+        "VIX是主触发器，CNN用于确认。评级衡量低吸准备度，不代表市场安全，也不是自动买单。"
+        "任何建仓必须先确认收入/订单、利润率、FCF、债务/信用和竞争地位没有实质恶化。\n"
+        "Method: CNN measures broad composite sentiment; VIX prices roughly 30-day S&P 500 option protection. "
+        "VIX is the primary trigger and CNN is confirmation. The score measures dip-buy readiness, not safety or an automatic order."
+    )
+    return f"{table}\n\n{explanation}"
+
+
 def stock_by_name(config: Dict[str, Any], name: str) -> Optional[Dict[str, Any]]:
     for stock in config.get("stocks", []):
         if stock.get("name") == name:
@@ -2741,9 +2961,14 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
             )
 
     indicator_alerts: List[str] = []
+    cnn_sentiment: Optional[SentimentIndex] = None
+    vix_quote: Optional[Quote] = None
+    sentiment_framework_enabled = config.get("market_sentiment_framework", {}).get("enabled", False)
     for indicator in config.get("market_indicators", []):
         try:
-            if indicator.get("type") == "crypto_fear_greed":
+            if indicator.get("type") == "cnn_fear_greed":
+                cnn_sentiment = fetch_cnn_fear_greed()
+            elif indicator.get("type") == "crypto_fear_greed":
                 sentiment = fetch_crypto_fear_greed()
                 alerts = check_sentiment_index_rules(indicator, sentiment)
                 triggered = triggered or bool(alerts)
@@ -2751,6 +2976,10 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
                     indicator_alerts.append(f"{indicator['name']} ({indicator['ticker']})\n{alert}\n{sentiment_snapshot(sentiment)}")
             else:
                 quote = get_quote(indicator["ticker"], quote_cache)
+                if indicator.get("ticker") == "^VIX":
+                    vix_quote = quote
+                    if sentiment_framework_enabled:
+                        continue
                 alerts = check_indicator_rules(indicator, quote)
                 triggered = triggered or bool(alerts)
                 for alert in alerts:
@@ -2763,6 +2992,13 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
                     f"{indicator.get('name', indicator.get('ticker'))} data fetch failed: {exc}",
                 )
             )
+
+    sentiment_decision: Optional[Dict[str, Any]] = None
+    sentiment_section = ""
+    if sentiment_framework_enabled:
+        sentiment_decision = market_sentiment_decision(config, cnn_sentiment, vix_quote)
+        sentiment_section = market_sentiment_section(sentiment_decision)
+        triggered = triggered or sentiment_decision["triggered"]
 
     influencer_rows: List[List[str]] = []
     if config.get("influencer_watch", {}).get("enabled", False) and should_include_influencer_section(rotation_alerts, stock_rows):
@@ -2779,27 +3015,33 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
                 ]
             ]
 
-    has_any_signal = bool(rotation_alerts or stock_rows or stock_errors or indicator_alerts or market_scan_section or elite_reset_section or market_mover_section or china_recovery_section)
+    has_any_signal = bool(rotation_alerts or stock_rows or stock_errors or indicator_alerts or sentiment_section or market_scan_section or elite_reset_section or market_mover_section or china_recovery_section)
 
     lines.append("一、今日结论 / Today's Conclusion")
     lines.append("--------------------------------")
-    lines.append(executive_summary(rotation_alerts, stock_rows, indicator_alerts))
+    lines.append(executive_summary(rotation_alerts, stock_rows, indicator_alerts, sentiment_decision))
     lines.append("")
 
+    if sentiment_section:
+        lines.append("二、市场情绪与低吸评级 / Market Sentiment & Dip-Buy Rating")
+        lines.append("------------------------------------------------------------")
+        lines.append(sentiment_section)
+        lines.append("")
+
     if market_mover_section:
-        lines.append("二、全球旗舰资产异动榜 / Global Leadership Movers")
+        lines.append("三、全球旗舰资产异动榜 / Global Leadership Movers")
         lines.append("-----------------------------------------------------")
         lines.append(market_mover_section)
         lines.append("")
 
     if china_recovery_section:
-        lines.append("三、中概持仓四因子 / China Holdings Four-Factor Watch")
+        lines.append("四、中概持仓四因子 / China Holdings Four-Factor Watch")
         lines.append("-------------------------------------------------------")
         lines.append(china_recovery_section)
         lines.append("")
 
     if rotation_alerts or stock_rows:
-        lines.append("四、可执行信号 / Actionable Signals")
+        lines.append("五、可执行信号 / Actionable Signals")
         lines.append("----------------------------------")
         if stock_rows:
             lines.append(concise_signal_briefs(stock_rows, max_rows=4))
@@ -2810,20 +3052,20 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append("")
 
     if elite_reset_section:
-        lines.append("五、旗舰资产深回撤 / Elite Franchise Deep-Reset Watch")
+        lines.append("六、旗舰资产深回撤 / Elite Franchise Deep-Reset Watch")
         lines.append("---------------------------------------------------------")
         lines.append(elite_reset_section)
         lines.append("")
 
     if market_scan_section:
-        lines.append("六、赛道轮动扫描 / Market Rotation Scan")
+        lines.append("七、赛道轮动扫描 / Market Rotation Scan")
         lines.append("------------------------------------------")
         lines.append(market_scan_section)
         lines.append("")
 
     decision_memos = decision_memos_for_rows(stock_rows, config, quote_cache)
     if decision_memos:
-        lines.append("七、交易前八栏复核 / Pre-Trade Eight-Gate Review")
+        lines.append("八、交易前八栏复核 / Pre-Trade Eight-Gate Review")
         lines.append("---------------------------------------------------")
         lines.append("只对真正触发的机会/强势信号展开。自动数据用于筛查，不替代财报、估值与信用人工核验。")
         lines.append("Expanded only for decision-level signals. Automated data screens for risk; it does not replace earnings, valuation, or credit verification.")
@@ -2833,7 +3075,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
 
     supplemental_stock_rows = top_signal_rows(stock_rows, max_rows=10)[4:] if stock_rows else []
     if supplemental_stock_rows or stock_errors:
-        lines.append("八、补充观察 / Additional Watch")
+        lines.append("九、补充观察 / Additional Watch")
         lines.append("-------------------------------")
         if supplemental_stock_rows:
             lines.append(tight_portfolio_diagnosis(supplemental_stock_rows, max_names=6))
@@ -2852,7 +3094,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
     regime_section = portfolio_regime_table(config, quote_cache) if (rotation_alerts or stock_rows) else ""
 
     if indicator_alerts or geo_section or regime_section:
-        lines.append("九、市场温度 / Market Temperature")
+        lines.append("十、市场温度 / Market Temperature")
         lines.append("--------------------------------")
         if regime_section:
             lines.append(regime_section)
@@ -2870,18 +3112,18 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
 
     omitted_section = not_expanded_today(config, quote_cache, stock_rows)
     if omitted_section:
-        lines.append("十、今天不单独展开 / Not Expanded Today")
+        lines.append("十一、今天不单独展开 / Not Expanded Today")
         lines.append("-------------------------------------")
         lines.append(omitted_section)
         lines.append("")
 
     if influencer_rows:
-        lines.append("十一、高手雷达 / Influencer Radar")
+        lines.append("十二、高手雷达 / Influencer Radar")
         lines.append("--------------------------------")
         lines.append(influencer_blocks(influencer_rows[:3]))
         lines.append("")
 
-    lines.append("十二、经验提醒 / Experience Reminders")
+    lines.append("十三、经验提醒 / Experience Reminders")
     lines.append("-----------------------------------")
     lines.append(experience_reminders())
     lines.append("")

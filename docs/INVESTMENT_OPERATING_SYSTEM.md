@@ -14,12 +14,39 @@ The system is deliberately conservative about what automation can know. Price, v
 
 | Bucket | Purpose | Typical names | Rule |
 |---|---|---|---|
+| Blue-chip golden pit | Highest-priority mispricing target | MSFT, META, GOOGL, AMZN, AVGO, NVDA, AAPL, UNH, ASML, Airbus, LVMH, SAP, Schneider, Safran, Tencent, Alibaba, Meituan | When a real franchise is wrongly sold off and leading indicators remain intact, it can deserve a meaningful position |
 | Core | Compound capital at a lower trading frequency | Tencent, Microsoft, selected AI picks-and-shovels | Sell only when valuation, thesis, or portfolio weight requires it |
 | Convexity | Capture a possible 50-100% re-rating with capped portfolio damage | Oracle, Bitcoin, strict-reset AI leaders | 10-15% of portfolio in aggregate; staged entries only |
 | Swing | Monetize sentiment and valuation swings in durable cyclicals | Airbus, Groupe ADP | Buy deep reset, trim strength; do not force monthly trades |
 | Reserve | Preserve optionality for genuine panic | Cash | Cash is not a failed investment; it is the right to act when others cannot |
 
 The portfolio is not built around the most exciting story. Position size is a function of expected return, probability, downside, correlation, and financing sensitivity.
+
+## Blue-Chip Golden Pit Priority
+
+The first strategy for a small account is not to find the next tiny ten-bagger. It is to wait for a large, durable company to be wrongly priced by the market, then size the trade meaningfully while the invalidation conditions are clear.
+
+The preferred long-term watchlist is:
+
+| Market | Names |
+|---|---|
+| U.S. | MSFT, META, GOOGL, AMZN, AVGO, NVDA, AAPL, UNH |
+| Europe | ASML, Airbus, LVMH, SAP, Schneider, Safran |
+| Hong Kong | Tencent, Alibaba, Meituan |
+| Special | ORCL: between blue-chip scale and high-risk AI capital cycle; debt, CapEx, FCF, credit rating, customer concentration, and large AI contracts must be checked separately. SpaceX/SPCX: listed special case; ignore pre-IPO legacy SPCX history and separately track AI compute CapEx, AI revenue, contract cancellability, debt cost, Starlink cash flow, launch/government contracts, power/cooling/permits, and data-center reliability |
+
+A blue-chip golden pit requires all of the following:
+
+| Requirement | Meaning |
+|---|---|
+| Franchise quality | The company has durable cash flow, scale, market position, or strategic importance |
+| Real drawdown | The stock is in its own historical deep-reset zone, not merely down a few percent |
+| Mispricing source | The selloff is driven by macro, rates, regulation, AI capex fear, cyclicality, or short-term narrative pressure |
+| Leading indicators intact | Revenue quality, orders, margins, FCF, buybacks, market share, or credit conditions are not breaking |
+| Flow improvement | Selling pressure is fading, the second retest is lighter, or bad news no longer creates a new low |
+| Invalidation defined | If leading indicators break, the stock stops being a golden pit and becomes a risk case |
+
+This priority changes position sizing. A true blue-chip golden pit can justify a larger staged allocation than a high-beta thematic name. COHR, VRT, MU, BE, CRWV, and NBIS may have higher headline upside, but they should not automatically receive core-weight sizing because their volatility, customer concentration, financing risk, or execution risk is higher.
 
 ## Capital-Cycle Lens
 
@@ -103,6 +130,20 @@ Macro is an environment filter, not a forecasting game.
 - QQQ and SMH are risk-appetite proxies for AI. They cannot replace the actual checks: hyperscaler CapEx, orders, utilization, GPU rental economics, and financing terms.
 - Brent, VIX, the U.S. 10Y, Hang Seng, and EUR/CNY are used to rank active geopolitical and China-risk themes. At most three themes should be active at one time.
 
+### CNN Fear & Greed + VIX Decision Rule
+
+The daily email reports one joint **dip-buy readiness** score instead of repeating separate sentiment commentary. VIX is the primary trigger; CNN Fear & Greed confirms whether weakness is broad across momentum, breadth, credit, volatility, and safe-haven behavior.
+
+| Condition | Rating | Operating response |
+|---|---:|---|
+| VIX below 20 | 3-5/10 | Research only; CNN fear without VIX stress is not a broad panic-buy signal |
+| VIX 20-24.9 | 7/10 | Prepare cash and candidates; wait for stock-level seller exhaustion |
+| VIX 25-29.9 | 8/10 | Material fear; review a very small first tranche after red-flag checks |
+| VIX 30-39.9 | 9/10 | High-probability golden-pit scan zone; prioritize durable franchises |
+| VIX 40+ | 10/10 | Extreme panic; review staged buying immediately, never all at once |
+
+CNN at `24` or below adds one confirmation point, capped at `10`. This is an opportunity-readiness score, not a bottom forecast. The fundamental gate is mandatory: revenue/orders, margin, FCF, debt/credit, competitive position, and leading indicators must not be materially broken. A high VIX cannot turn a deteriorating company into a bargain.
+
 ## Market Rotation Scanner
 
 The scanner is designed for early research, not for chasing a sector that has already moved.
@@ -128,7 +169,7 @@ Exceptional franchises can produce exceptional returns after a real valuation re
 
 The universe is the Magnificent Seven, memory/HBM leaders (SK Hynix, Samsung, Micron), and AI franchise leaders (Nvidia, Broadcom, Marvell). Tesla is included because it is one of the seven, but its EV price competition, autonomy execution, and financing sensitivity require a higher bar than the cash-compounder names.
 
-SpaceX is intentionally manual. A private-market valuation, secondary-share discount, launch cadence, Starlink economics, and government contract development may justify research; an unofficial public ticker never does.
+SpaceX/SPCX is intentionally separate from ordinary blue-chip watches. Because SPCX began trading as SpaceX on June 12, 2026 and the ticker had prior legacy history, all drawdown, low-range, and return analysis must start from the post-IPO period. The core question is whether AI compute revenue and contracted backlog can justify AI data-center CapEx, debt cost, power/cooling investment, and execution risk without weakening the Starlink, launch, and government-contract engines.
 
 ## Global Leadership Movers
 
