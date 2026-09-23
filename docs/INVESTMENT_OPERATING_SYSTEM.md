@@ -78,6 +78,27 @@ The watchlist is organized by economic mechanism, rather than by ticker alone.
 | Crypto liquidity | Bitcoin | Are liquidity, ETF flows, miner stress, and leverage creating a favorable asymmetry? |
 | Speculative optionality | Tesla, Pony AI, NIO, iQIYI | Is there a real commercialization path and sufficient funding runway? |
 
+## Breakthrough Product Commercialization Protocol
+
+A breakthrough product expands the long-term addressable market, but it does not by itself justify a stock re-rating. Tesla/Cybercab and SpaceX are reviewed in the following order:
+
+| Gate | Evidence required | What does not count as confirmation |
+|---|---|---|
+| Real demand | Paid usage, repeat customers, subscribers, credible contracts, and utilization | Reservations, demonstrations, management targets, or non-binding interest alone |
+| Scaled production | Repeatable volume, stable operations, improving reliability, and no recurring schedule slippage | A prototype, first unit, first launch, or the start of low-volume production |
+| Unit economics | Revenue and fully loaded cost per unit/mile/subscriber, utilization, gross margin, and payback trend | Revenue growth without depreciation, labor, support, energy, and maintenance costs |
+| Financial de-risking | CapEx efficiency, operating cash flow, free cash flow, liquidity, and manageable funding cost | A large cash balance financed by new equity or debt while cash burn accelerates |
+
+### Tesla / Cybercab
+
+Cybercab is not treated as a confirmed profit engine until Tesla discloses or provides enough evidence to estimate paid miles per vehicle, utilization, empty miles, remote intervention, fully loaded cost per mile, vehicle payback, and Robotaxi margin. Production starting is an execution milestone, not the final gate. A high-priority entry requires a deep stock reset, intact safety/regulatory progress, improving operating evidence, and a credible path back to positive free cash flow.
+
+### SpaceX
+
+SpaceX is split into three economic engines. Starlink/Starshield is the validated connectivity cash engine; launch/Starship must prove reliable high-frequency reuse and lower cost to orbit; AI infrastructure must convert contracted demand into revenue, margin, and cash faster than data-center CapEx grows. Starlink profitability cannot automatically validate Starship or AI economics. The stock only receives a high-conviction reset signal when valuation offers a meaningful discount and consolidated CapEx efficiency and free cash flow improve.
+
+Quarterly fundamental snapshots are dated in configuration. A stale snapshot blocks a fresh fundamental conclusion until official filings are reviewed, even when daily price and volume data are current.
+
 ## Eight-Gate Decision Protocol
 
 Every material purchase, add, trim, or rotation must answer the following.

@@ -2007,14 +2007,100 @@ def elite_franchise_reset_watch(config: Dict[str, Any], quote_cache: Dict[str, Q
     if not rows:
         return "", False
     rows = rows[: int(settings.get("max_candidates_per_email", 4))]
-    special_note = settings.get("listed_special_watch", {}).get("note", "")
     lines = [
         settings.get("principle", "旗舰资产大跌是研究机会，不是自动加仓理由。"),
         markdown_table(["类别", "标的", "回撤/量价", "阶段", "必须核对", "建议"], rows),
     ]
-    if special_note:
-        lines.extend(["", f"SpaceX/SPCX专项观察：{special_note}"])
     return "\n".join(lines), True
+
+
+def snapshot_age_days(as_of: str) -> Optional[int]:
+    try:
+        return (datetime.now(timezone.utc).date() - datetime.fromisoformat(as_of).date()).days
+    except (TypeError, ValueError):
+        return None
+
+
+def breakthrough_product_watch(
+    config: Dict[str, Any], quote_cache: Dict[str, Quote]
+) -> Tuple[str, bool]:
+    """Track whether a breakthrough product has become an investable profit engine."""
+    settings = config.get("breakthrough_product_watch", {})
+    if not settings.get("enabled", False):
+        return "", False
+
+    rows: List[List[str]] = []
+    triggered = False
+    for asset in settings.get("assets", []):
+        ticker = asset.get("ticker")
+        if not ticker:
+            continue
+        try:
+            quote = get_quote(ticker, quote_cache)
+        except Exception:
+            continue
+
+        drawdown = one_year_drawdown_pct(quote)
+        ratio = volume_ratio(quote)
+        deep_reset = float(asset.get("deep_reset_pct", -25.0))
+        price_trigger = drawdown is not None and drawdown <= deep_reset
+        heavy_sell = quote.daily_pct <= -4.0 and ratio is not None and ratio >= 1.5
+        buyer_confirmation = quote.daily_pct >= 2.0 and ratio is not None and ratio >= 1.3
+        triggered = triggered or price_trigger or heavy_sell or buyer_confirmation
+
+        age = snapshot_age_days(str(asset.get("as_of", "")))
+        stale_after = int(asset.get("stale_after_days", 120))
+        stale = age is None or age > stale_after
+        if stale:
+            data_state = f"基本面快照过期（{asset.get('as_of', 'n/a')}），交易前更新财报"
+        else:
+            data_state = f"基本面截至 {asset.get('as_of')}"
+
+        if heavy_sell:
+            action = "放量下跌，先等卖压衰竭；不把第一轮抛售当底部。"
+        elif price_trigger and ratio is not None and ratio <= 0.8:
+            action = "达到深回撤且成交缩量；进入优先研究，仍需等不创新低或买方确认。"
+        elif buyer_confirmation and price_trigger:
+            action = "深回撤后出现买方确认；仅在四项验证未恶化时评估首笔小仓。"
+        elif price_trigger:
+            action = "已进入深回撤区，但量价未确认；只核查基本面，不急于下单。"
+        else:
+            action = asset.get("required_action", "继续观察四项验证，不因产品叙事追价。")
+
+        price_text = (
+            f"{quote.last:.2f}；今日 {quote.daily_pct:+.1f}%；"
+            f"距一年高点 {drawdown:+.1f}%；量 {ratio:.1f}x"
+            if drawdown is not None and ratio is not None
+            else f"{quote.last:.2f}；今日 {quote.daily_pct:+.1f}%；量价数据不完整"
+        )
+        gates = (
+            f"需求：{asset.get('demand', '待更新')}<br>"
+            f"量产：{asset.get('scale', '待更新')}<br>"
+            f"单位经济：{asset.get('unit_economics', '待更新')}<br>"
+            f"财务：{asset.get('finance', '待更新')}"
+        )
+        conclusion = (
+            f"确认度 {asset.get('confirmation_score', 'n/a')}/10；"
+            f"{asset.get('valuation', '')}<br>缺口：{asset.get('confirmation_needed', '')}"
+        )
+        rows.append(
+            [
+                f"{asset.get('name', ticker)} ({ticker})",
+                price_text,
+                gates,
+                conclusion,
+                f"{action}<br>{data_state}",
+            ]
+        )
+
+    if not rows:
+        return "", False
+    rows = rows[: int(settings.get("max_rows", 2))]
+    table = markdown_table(
+        ["资产 / Asset", "价格与资金 / Tape", "四项验证 / Four gates", "判断 / Read", "动作 / Action"],
+        rows,
+    )
+    return f"{settings.get('principle', '')}\n\n{table}", triggered
 
 
 def market_mover_watch(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> str:
@@ -2091,12 +2177,6 @@ def market_mover_watch(config: Dict[str, Any], quote_cache: Dict[str, Quote]) ->
                 ),
             ]
         )
-    lines.extend(
-        [
-            "",
-            "用法：榜单是发现线索，不是交易指令。跌幅榜只进入基本面、信用和量价复核；涨幅榜用于识别赛道领导力与可能的止盈/不追高区。",
-        ]
-    )
     return "\n".join(lines)
 
 
@@ -2879,11 +2959,9 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
 
     lines.append(f"CEO 投资简报 / CEO Investment Brief - {now}")
     lines.append("")
-    lines.append("汇报口径：只汇报可决策信号；同类信息合并，避免重复。")
-    lines.append("Standard: decision-level signals only; similar information is grouped to avoid repetition.")
-    lines.append("")
 
     global_rules = config.get("global_rules", {})
+    layout = config.get("email_layout", {})
     quote_cache: Dict[str, Quote] = {}
 
     rotation_alerts: List[str] = []
@@ -2933,6 +3011,17 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         elite_reset_section = bilingual(
             f"旗舰资产深回撤扫描失败：{exc}",
             f"Elite franchise reset watch failed: {exc}",
+        )
+
+    breakthrough_section = ""
+    breakthrough_triggered = False
+    try:
+        breakthrough_section, breakthrough_triggered = breakthrough_product_watch(config, quote_cache)
+        triggered = triggered or breakthrough_triggered
+    except Exception as exc:
+        breakthrough_section = bilingual(
+            f"划时代产品兑现跟踪失败：{exc}",
+            f"Breakthrough-product watch failed: {exc}",
         )
 
     market_mover_section = market_mover_watch(config, quote_cache)
@@ -3015,36 +3104,36 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
                 ]
             ]
 
-    has_any_signal = bool(rotation_alerts or stock_rows or stock_errors or indicator_alerts or sentiment_section or market_scan_section or elite_reset_section or market_mover_section or china_recovery_section)
+    has_any_signal = bool(rotation_alerts or stock_rows or stock_errors or indicator_alerts or sentiment_section or market_scan_section or elite_reset_section or breakthrough_section or market_mover_section or china_recovery_section)
 
-    lines.append("一、今日结论 / Today's Conclusion")
-    lines.append("--------------------------------")
+    lines.append("## 今日结论 / Today's Conclusion")
     lines.append(executive_summary(rotation_alerts, stock_rows, indicator_alerts, sentiment_decision))
     lines.append("")
 
     if sentiment_section:
-        lines.append("二、市场情绪与低吸评级 / Market Sentiment & Dip-Buy Rating")
-        lines.append("------------------------------------------------------------")
+        lines.append("## 市场情绪与低吸评级 / Sentiment")
         lines.append(sentiment_section)
         lines.append("")
 
     if market_mover_section:
-        lines.append("三、全球旗舰资产异动榜 / Global Leadership Movers")
-        lines.append("-----------------------------------------------------")
+        lines.append("## 全球旗舰资产异动榜 / Global Movers")
         lines.append(market_mover_section)
         lines.append("")
 
     if china_recovery_section:
-        lines.append("四、中概持仓四因子 / China Holdings Four-Factor Watch")
-        lines.append("-------------------------------------------------------")
+        lines.append("## 中概持仓四因子 / China Four-Factor Watch")
         lines.append(china_recovery_section)
         lines.append("")
 
     if rotation_alerts or stock_rows:
-        lines.append("五、可执行信号 / Actionable Signals")
-        lines.append("----------------------------------")
+        lines.append("## 可执行信号 / Actionable Signals")
         if stock_rows:
-            lines.append(concise_signal_briefs(stock_rows, max_rows=4))
+            lines.append(
+                concise_signal_briefs(
+                    stock_rows,
+                    max_rows=int(layout.get("max_actionable_signals", 4)),
+                )
+            )
             lines.append("")
         if rotation_alerts:
             lines.append("重点调仓候选 / Rotation Candidates")
@@ -3052,31 +3141,36 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append("")
 
     if elite_reset_section:
-        lines.append("六、旗舰资产深回撤 / Elite Franchise Deep-Reset Watch")
-        lines.append("---------------------------------------------------------")
+        lines.append("## 旗舰资产深回撤 / Elite Franchise Reset")
         lines.append(elite_reset_section)
         lines.append("")
 
+    if breakthrough_section and (
+        config.get("breakthrough_product_watch", {}).get("show_daily", True)
+        or breakthrough_triggered
+    ):
+        lines.append("## 划时代产品兑现 / Breakthrough Product Watch")
+        lines.append(breakthrough_section)
+        lines.append("")
+
     if market_scan_section:
-        lines.append("七、赛道轮动扫描 / Market Rotation Scan")
-        lines.append("------------------------------------------")
+        lines.append("## 赛道轮动扫描 / Market Rotation Scan")
         lines.append(market_scan_section)
         lines.append("")
 
-    decision_memos = decision_memos_for_rows(stock_rows, config, quote_cache)
+    decision_memos = (
+        decision_memos_for_rows(stock_rows, config, quote_cache)
+        if layout.get("show_eight_gate_review", False)
+        else ""
+    )
     if decision_memos:
-        lines.append("八、交易前八栏复核 / Pre-Trade Eight-Gate Review")
-        lines.append("---------------------------------------------------")
-        lines.append("只对真正触发的机会/强势信号展开。自动数据用于筛查，不替代财报、估值与信用人工核验。")
-        lines.append("Expanded only for decision-level signals. Automated data screens for risk; it does not replace earnings, valuation, or credit verification.")
-        lines.append("")
+        lines.append("## 交易前八栏复核 / Eight-Gate Review")
         lines.append(decision_memos)
         lines.append("")
 
     supplemental_stock_rows = top_signal_rows(stock_rows, max_rows=10)[4:] if stock_rows else []
     if supplemental_stock_rows or stock_errors:
-        lines.append("九、补充观察 / Additional Watch")
-        lines.append("-------------------------------")
+        lines.append("## 补充观察 / Additional Watch")
         if supplemental_stock_rows:
             lines.append(tight_portfolio_diagnosis(supplemental_stock_rows, max_names=6))
         if stock_errors:
@@ -3094,8 +3188,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
     regime_section = portfolio_regime_table(config, quote_cache) if (rotation_alerts or stock_rows) else ""
 
     if indicator_alerts or geo_section or regime_section:
-        lines.append("十、市场温度 / Market Temperature")
-        lines.append("--------------------------------")
+        lines.append("## 市场温度 / Market Temperature")
         if regime_section:
             lines.append(regime_section)
             lines.append("")
@@ -3110,23 +3203,25 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
             lines.append(markdown_table(["指标", "核心信号"], indicator_rows))
         lines.append("")
 
-    omitted_section = not_expanded_today(config, quote_cache, stock_rows)
+    omitted_section = (
+        not_expanded_today(config, quote_cache, stock_rows)
+        if layout.get("show_not_expanded_today", False)
+        else ""
+    )
     if omitted_section:
-        lines.append("十一、今天不单独展开 / Not Expanded Today")
-        lines.append("-------------------------------------")
+        lines.append("## 今天不单独展开 / Not Expanded Today")
         lines.append(omitted_section)
         lines.append("")
 
     if influencer_rows:
-        lines.append("十二、高手雷达 / Influencer Radar")
-        lines.append("--------------------------------")
+        lines.append("## 高手雷达 / Influencer Radar")
         lines.append(influencer_blocks(influencer_rows[:3]))
         lines.append("")
 
-    lines.append("十三、经验提醒 / Experience Reminders")
-    lines.append("-----------------------------------")
-    lines.append(experience_reminders())
-    lines.append("")
+    if layout.get("show_experience_reminders", False):
+        lines.append("## 经验提醒 / Experience Reminders")
+        lines.append(experience_reminders())
+        lines.append("")
 
     if not has_any_signal:
         lines.append("结论：今天没有达到决策级别的新信号，继续观察，不做动作。")

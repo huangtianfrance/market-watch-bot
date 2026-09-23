@@ -10,6 +10,13 @@ portfolio:
   preferred_min_trade_eur: 1000
   execution_style: "长期观察、低频决策；集中于少数高赔率机会，分批建仓、分批止盈，保留恐慌期现金。"
 
+email_layout:
+  max_actionable_signals: 4
+  show_eight_gate_review: false
+  show_not_expanded_today: false
+  show_experience_reminders: false
+  show_static_explanations: false
+
 data_fetch:
   provider: Yahoo Finance via yfinance
   request_pause_seconds: 0.7
@@ -303,13 +310,46 @@ elite_franchise_reset_watch:
     ipo_date: "2026-06-12"
     note: "SpaceX/SPCX已上市。所有价格、回撤和一年区间计算只能使用2026-06-12 IPO之后的数据；Nasdaq提示旧SPCX历史数据不得与当前SpaceX连接。重点核对AI算力CapEx、AI收入、合同可取消性、债务利率、Starlink现金流、发射/政府合同、电力/冷却/许可和数据中心可靠性。"
 
+breakthrough_product_watch:
+  enabled: true
+  show_daily: true
+  principle: "划时代产品决定长期空间；只有需求、量产、单位经济和现金流依次得到验证，才把技术叙事升级为盈利重估。"
+  max_rows: 2
+  assets:
+    - name: Tesla / Cybercab
+      ticker: TSLA
+      as_of: "2026-06-30"
+      stale_after_days: 120
+      confirmation_score: 4
+      demand: "FSD活跃订阅148万；Robotaxi付费里程增长，但Cybercab利用率与复购未披露。"
+      scale: "Q2已开始生产；大规模量产、车队规模和稳定运营尚未确认。"
+      unit_economics: "每英里收入/成本、空驶率、远程接管率和单车回本周期未披露。"
+      finance: "Q2现金及短投$43.5B；经营现金流$4.7B；CapEx $5.8B；FCF -$1.1B。"
+      valuation: "高估值已经提前计入较大自动驾驶成功预期，不能把开始生产等同于盈利确认。"
+      confirmation_needed: "连续量产爬坡；每车每日付费里程与人工干预改善；Robotaxi毛利可见；CapEx见顶且FCF转正。"
+      deep_reset_pct: -25.0
+      required_action: "未完成单位经济验证前只观察；深回撤且四项指标未坏时研究小仓，盈利与FCF确认后再升级。"
+    - name: SpaceX / Starlink + Starship + AI
+      ticker: SPCX
+      as_of: "2026-06-30"
+      stale_after_days: 120
+      confirmation_score: 7
+      demand: "Starlink用户1200万、同比翻倍；Q2连接业务收入$4.3B；企业/政府收入同比+108%。"
+      scale: "Starlink/Falcon已规模化；Starship高频复用和AI数据中心仍在扩产验证。"
+      unit_economics: "连接业务Q2营业利润$1.66B、利润率约38.6%；Space与AI业务仍亏损。"
+      finance: "H1经营现金流$3.5B；CapEx $28.5B；估算FCF约-$25.0B，主要由AI基础设施扩张驱动。"
+      valuation: "Starlink现金牛已确认，但股价同时计入Starship与AI成功，估值容错率低。"
+      confirmation_needed: "Starlink利润率维持；ARPU降幅可控；AI合同转为收入/现金；CapEx/收入下降；Starship稳定复用。"
+      deep_reset_pct: -30.0
+      required_action: "业务确认度高于Cybercab，但不是低估蓝筹；等待深回撤与资本开支效率改善，不按故事追涨。"
+
 market_mover_watch:
   enabled: true
   send_daily_email: true
   external_only: false
   max_rows: 10
   external_max_rows: 5
-  note: "这是全球高流动性龙头、明星和高潜力资产的精选池，不是全交易所原始涨跌榜。原始榜单常被小盘股、仙股和低流动性标的污染。"
+  note: "全球高流动性龙头精选榜；用于发现异常资金流，不直接产生交易指令。"
   universe:
     - {ticker: AAPL, name: Apple, region: US, style: "Mega-cap technology"}
     - {ticker: MSFT, name: Microsoft, region: US, style: "AI cash compounder"}

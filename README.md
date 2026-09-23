@@ -12,6 +12,16 @@ It checks your watchlist on a schedule and emails you when a rule is triggered:
 
 The report is intentionally alert-only and bilingual Chinese/English. It does not send routine portfolio summaries unless `send_email_when_no_alerts` is set to `true`.
 
+## Breakthrough Product Watch
+
+Tesla/Cybercab and SpaceX are tracked with the same commercialization sequence that separated the Model 3 announcement from Tesla's later profit-driven re-rating:
+
+`real demand -> scaled production -> improving unit economics -> lower financial risk`
+
+The email presents both assets in one compact table. Tesla is judged by paid Robotaxi usage, Cybercab production, intervention and cost-per-mile economics, Robotaxi margin, CapEx, and free cash flow. SpaceX is split into Starlink/Starshield, launch/Starship, and AI infrastructure; the bot tracks subscriber and contract demand, segment margins, ARPU, CapEx versus revenue, free cash flow, and Starship reuse.
+
+Fundamental figures in `config/watchlist.yml` carry an `as_of` date. The report warns when that snapshot is stale, because price data can update automatically while quarterly unit economics cannot safely be inferred from price. A product launch or start of production is never treated as proof of a profitable business.
+
 ## Market Sentiment Decision Matrix
 
 Every report combines CNN Fear & Greed with VIX into a `1-10` **dip-buy readiness** rating. VIX is the primary trigger because it reflects the price of roughly 30-day S&P 500 option protection; CNN is the confirmation layer because it combines breadth, momentum, credit, safe-haven demand, and other market signals.
@@ -41,6 +51,8 @@ Alert emails are written as a CEO investment brief, not a machine log. Each aler
 Technical terms are explained briefly in the email. For example, volume is described as market participation/attention, and a market-confirmed re-rating is explained as price plus volume showing that real money may be repricing the asset.
 
 The tone is deliberately direct: recommendation, rationale, decision condition, and risk guardrail.
+
+Repeated boilerplate is disabled by default through `email_layout`: routine experience reminders, the no-highlight list, and the full eight-gate memo stay out of the daily brief. The underlying rules remain documented and can be re-enabled when needed. The daily email keeps the conclusion, core tables, abnormal price/volume evidence, and decision conditions.
 
 ## Investment Framework v2
 
