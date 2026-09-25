@@ -25,6 +25,7 @@ class Quote:
     volume: Optional[float]
     avg_volume_20d: Optional[float]
     close_history: Any
+    volume_history: Any
     quality: "DataQuality"
 
 
@@ -134,6 +135,8 @@ def fetch_quality_report() -> str:
     fail_count = sum(1 for item in DATA_QUALITY_LOG if item.status != "ok")
     total_count = len(DATA_QUALITY_LOG)
     qualities_to_show = failed_items + [item for item in warning_items if item.status == "ok"]
+    if not fail_count and not warn_count and not FETCH_SETTINGS.get("include_successful_fetches", False):
+        return ""
     if FETCH_SETTINGS.get("include_successful_fetches", False):
         qualities_to_show = DATA_QUALITY_LOG
 
@@ -143,46 +146,16 @@ def fetch_quality_report() -> str:
     elif warn_count:
         quality_status = "有轻微警告 / minor warnings"
 
-    lines = [
-        "数据获取质量 / Data Quality",
-        "----------------------------",
-        markdown_table(
-            ["结论", "请求汇总", "交易前提醒"],
-            [
-                [
-                    quality_status,
-                    f"{total_count} total / {ok_count} ok / {warn_count} warnings / {fail_count} failed",
-                    "公开数据可能延迟；关键价格和新闻仍需人工复核。",
-                ]
-            ],
-        ),
-    ]
+    summary = f"{quality_status}；{ok_count}/{total_count} 成功，{warn_count} 警告，{fail_count} 失败"
     if fallback_items:
-        lines.append("")
-        lines.append(
-            markdown_table(
-                ["特殊情况", "影响"],
-                [[f"新闻搜索 {len(fallback_items)} 次使用备用源", "降级成功，不影响行情数据。"]],
-            )
-        )
+        summary += f"；{len(fallback_items)} 次新闻查询切换备用源"
     if qualities_to_show:
-        lines.append("")
-        lines.append("异常项 / Exceptions:")
-        lines.append(
-            markdown_table(
-                ["标的", "状态", "来源", "提示"],
-                [
-                    [
-                        item.symbol,
-                        item.status,
-                        trim_text(item.source, 38),
-                        trim_text("; ".join(item.warnings or []) or item.error or "n/a", 90),
-                    ]
-                    for item in qualities_to_show[:10]
-                ],
-            )
+        exceptions = "; ".join(
+            f"{item.symbol}: {trim_text('; '.join(item.warnings or []) or item.error or 'n/a', 60)}"
+            for item in qualities_to_show[:2]
         )
-    return "\n".join(lines)
+        summary += f"。需注意：{exceptions}"
+    return f"**数据质量 / Data quality：** {summary}。关键交易前仍复核价格与公告。"
 
 
 def data_latest_date_and_freshness(close: Any) -> Tuple[str, Optional[int]]:
@@ -314,6 +287,7 @@ def fetch_quote(ticker: str) -> Quote:
         volume=current_volume,
         avg_volume_20d=avg_volume_20d,
         close_history=close,
+        volume_history=volume,
         quality=quality,
     )
 
@@ -962,7 +936,7 @@ def influencer_latest_rows(config: Dict[str, Any]) -> List[List[str]]:
     max_articles = int(settings.get("max_articles_per_influencer", 2))
     lookback = str(settings.get("lookback", "7d"))
     pause = float(settings.get("request_pause_seconds", 3.0))
-    rows: List[List[str]] = []
+    candidates: List[Tuple[int, Dict[str, Any], str, str, str, str, str]] = []
 
     for person in people:
         if pause > 0:
@@ -1118,9 +1092,72 @@ def executive_summary(
     return markdown_table(["类别", "核心判断", "动作"], rows)
 
 
+def today_highlights(
+    stock_rows: List[List[str]],
+    sentiment_decision: Optional[Dict[str, Any]],
+    rotation_alerts: List[str],
+    market_mover_triggered: bool,
+    elite_reset_triggered: bool,
+    market_scan_triggered: bool,
+    breakthrough_triggered: bool,
+    confirmed_add_highlights: Optional[List[List[str]]] = None,
+    max_rows: int = 3,
+    priority_tickers: Optional[Set[str]] = None,
+) -> str:
+    """One compact, non-repeating decision board for the top of the email."""
+    rows: List[List[str]] = []
+    if sentiment_decision and sentiment_decision.get("triggered"):
+        rows.append(
+            [
+                "市场情绪",
+                f"低吸准备度 {sentiment_decision['rating']}/10",
+                trim_text(sentiment_decision["action_short"], 70),
+            ]
+        )
+
+    for name, evidence, action in confirmed_add_highlights or []:
+        if len(rows) >= max_rows:
+            break
+        rows.append([name, f"确认型向上加仓；{trim_text(evidence, 58)}", trim_text(action, 70)])
+
+    for name, signal_type, metrics, analysis, decision in top_signal_rows(
+        stock_rows,
+        max_rows=max_rows,
+        priority_tickers=priority_tickers,
+    ):
+        rows.append(
+            [
+                name,
+                f"{trim_text(signal_type, 24)}；{trim_text(metrics, 42)}",
+                trim_text(plain_text(decision), 70),
+            ]
+        )
+        if len(rows) >= max_rows:
+            break
+
+    flags = [
+        (elite_reset_triggered, "蓝筹黄金坑", "旗舰资产出现深回撤，见下方量价与红旗核查。"),
+        (market_mover_triggered, "异常异动", "全球龙头出现异常涨跌或成交量，只展开达到阈值的标的。"),
+        (market_scan_triggered, "提前轮动", "发现仍在低位、尚未明显上涨的赛道候选。"),
+        (breakthrough_triggered, "产品兑现", "产品、量产或资金面出现需要复核的新信号。"),
+        (bool(rotation_alerts), "组合轮动", "资金来源和低位目标同时触发，但仍需人工复核。"),
+    ]
+    for enabled, label, action in flags:
+        if enabled and len(rows) < max_rows:
+            rows.append([label, "达到今日展示阈值", action])
+
+    if not rows:
+        rows.append(["无新亮点", "没有达到决策级阈值", "保持现金和原仓位，不为写邮件而交易。"])
+    return markdown_table(["亮点", "核心证据", "今日动作"], rows[:max_rows])
+
+
 def row_priority_score(row: List[str]) -> int:
+    if "价格已离开低位" in row[1] or "wait for pullback" in row[1].lower():
+        return 99
     priority_keys = [
         "deep pullback",
+        "提前埋伏",
+        "early value",
         "低位",
         "重估",
         "re-rating",
@@ -1138,9 +1175,32 @@ def row_priority_score(row: List[str]) -> int:
     return len(priority_keys)
 
 
-def top_signal_rows(rows: List[List[str]], max_rows: int = 6) -> List[List[str]]:
-    ranked = sorted(rows, key=row_priority_score)
-    top_rows = ranked[:max_rows]
+def top_signal_rows(
+    rows: List[List[str]],
+    max_rows: int = 6,
+    priority_tickers: Optional[Set[str]] = None,
+) -> List[List[str]]:
+    priority_tickers = priority_tickers or set()
+
+    def ranking_key(row: List[str]) -> Tuple[int, int]:
+        structural_priority = 1
+        if any(f"({ticker})" in row[0] for ticker in priority_tickers):
+            structural_priority = 0
+        return structural_priority, row_priority_score(row)
+
+    ranked = sorted(rows, key=ranking_key)
+    top_rows: List[List[str]] = []
+    seen_assets: Set[str] = set()
+    for row in ranked:
+        if "套牢盘压力" in row[1] or "holder overhang" in row[1].lower():
+            continue
+        asset = row[0]
+        if asset in seen_assets:
+            continue
+        seen_assets.add(asset)
+        top_rows.append(row)
+        if len(top_rows) >= max_rows:
+            break
     return top_rows
 
 
@@ -1152,9 +1212,9 @@ def decision_signal_table(rows: List[List[str]], max_rows: int = 6) -> str:
             [
                 name,
                 trim_text(signal_type, 28),
-                trim_text(metrics, 58),
-                trim_text(plain_text(analysis), 82),
-                trim_text(plain_text(decision), 82),
+                trim_text(metrics, 52),
+                trim_text(plain_text(analysis), 64),
+                trim_text(plain_text(decision), 64),
             ]
         )
     return markdown_table(
@@ -1830,6 +1890,29 @@ def trailing_return(quote: Quote, trading_days: int) -> Optional[float]:
         return None
 
 
+def buy_timing_gate(quote: Quote, rules: Dict[str, Any]) -> Tuple[bool, str]:
+    """Reject stale buy ideas after price has already left the discounted zone."""
+    position = one_year_position_ratio(quote)
+    drawdown = one_year_drawdown_pct(quote)
+    return_20d = trailing_return(quote, 20)
+    reasons: List[str] = []
+
+    max_position = float(rules.get("buy_max_1y_position", 0.35))
+    max_5d_gain = float(rules.get("buy_max_5d_gain_pct", 3.0))
+    max_20d_gain = float(rules.get("buy_max_20d_gain_pct", 8.0))
+    min_drawdown = float(rules.get("buy_min_drawdown_from_1y_high_pct", -15.0))
+
+    if position is not None and position > max_position:
+        reasons.append(f"一年位置已到 {position:.0%}")
+    if quote.five_day_pct is not None and quote.five_day_pct > max_5d_gain:
+        reasons.append(f"5日已涨 {quote.five_day_pct:+.1f}%")
+    if return_20d is not None and return_20d > max_20d_gain:
+        reasons.append(f"20日已涨 {return_20d:+.1f}%")
+    if drawdown is not None and drawdown > min_drawdown:
+        reasons.append(f"距一年高点仅 {drawdown:+.1f}%")
+    return not reasons, "；".join(reasons)
+
+
 def market_rotation_scan(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> Tuple[str, bool]:
     """Find early research candidates where sector flow and stock price location have not fully detached."""
     settings = config.get("market_scan", {})
@@ -1849,6 +1932,8 @@ def market_rotation_scan(config: Dict[str, Any], quote_cache: Dict[str, Quote]) 
     early_threshold = float(settings.get("early_relative_strength_20d_pct", 0.5))
     max_position = float(settings.get("candidate_max_1y_position", 0.65))
     min_5d = float(settings.get("candidate_min_5d_pct", -2.0))
+    max_5d = float(settings.get("candidate_max_5d_pct", 3.0))
+    max_20d = float(settings.get("candidate_max_20d_pct", 8.0))
     theme_rows: List[Tuple[float, List[str]]] = []
     candidate_rows: List[List[str]] = []
 
@@ -1883,7 +1968,13 @@ def market_rotation_scan(config: Dict[str, Any], quote_cache: Dict[str, Quote]) 
             if price_position is None or candidate.five_day_pct is None:
                 continue
             # A leader can be strong while a candidate is still in a normal valuation/range zone.
-            if emerging and price_position <= max_position and candidate.five_day_pct >= min_5d:
+            candidate_20d = trailing_return(candidate, 20)
+            if (
+                emerging
+                and price_position <= max_position
+                and min_5d <= candidate.five_day_pct <= max_5d
+                and (candidate_20d is None or candidate_20d <= max_20d)
+            ):
                 eligible.append((ticker, candidate, price_position))
 
         opportunity = "无合格低位候选 / no early candidate"
@@ -1939,6 +2030,232 @@ def market_rotation_scan(config: Dict[str, Any], quote_cache: Dict[str, Quote]) 
     return "\n".join(lines), bool(candidate_rows)
 
 
+def confirmed_add_scan(
+    config: Dict[str, Any], quote_cache: Dict[str, Quote]
+) -> Tuple[str, bool, List[List[str]]]:
+    """Find controlled averaging-up setups after a low-zone entry and a stable higher base."""
+    settings = config.get("confirmed_add_scan", {})
+    if not settings.get("enabled", False):
+        return "", False, []
+
+    benchmark_by_region = settings.get(
+        "benchmark_by_region",
+        {"US": "QQQ", "Europe": "VGK", "Hong Kong": "^HSI", "Korea": "^KS11"},
+    )
+    benchmark_returns: Dict[str, float] = {}
+    for region, ticker in benchmark_by_region.items():
+        try:
+            benchmark_quote = get_quote(ticker, quote_cache)
+            benchmark_return = trailing_return(benchmark_quote, 10)
+            if benchmark_return is not None:
+                benchmark_returns[region] = benchmark_return
+        except Exception:
+            continue
+    if "US" not in benchmark_returns:
+        return "确认型向上加仓扫描缺少美股基准历史。", False, []
+
+    stock_map = {stock.get("ticker"): stock for stock in config.get("stocks", [])}
+    universe: Dict[str, Dict[str, Any]] = {}
+    for asset in config.get("market_mover_watch", {}).get("universe", []):
+        ticker = asset.get("ticker")
+        if ticker:
+            universe[ticker] = asset
+    for ticker, stock in stock_map.items():
+        if ticker and not stock.get("disabled"):
+            universe.setdefault(
+                ticker,
+                {
+                    "ticker": ticker,
+                    "name": stock.get("name", ticker),
+                    "region": "Watchlist",
+                    "style": stock.get("profile", "tracked asset"),
+                },
+            )
+
+    base_days = int(settings.get("base_days", 10))
+    prior_lookback = int(settings.get("prior_low_lookback_days", 50))
+    min_advance = float(settings.get("min_advance_from_prior_low_pct", 10.0))
+    max_advance = float(settings.get("max_advance_from_prior_low_pct", 35.0))
+    max_base_range = float(settings.get("max_base_range_pct", 10.0))
+    min_floor_lift = float(settings.get("min_base_floor_above_prior_low_pct", 5.0))
+    max_down_volume = float(settings.get("max_down_volume_vs_prior_avg", 0.90))
+    min_up_down_volume = float(settings.get("min_up_vs_down_volume_ratio", 1.05))
+    higher_low_tolerance = float(settings.get("higher_low_tolerance_pct", 1.0))
+    min_relative = float(settings.get("min_relative_strength_10d_pct", 0.0))
+    max_1y_position = float(settings.get("max_1y_position", 0.70))
+    min_drawdown = float(settings.get("min_drawdown_from_1y_high_pct", -10.0))
+    max_20d_gain = float(settings.get("max_20d_gain_pct", 25.0))
+    min_passes = int(settings.get("min_technical_passes", 4))
+    fundamental_gates = settings.get("fundamental_gates", {})
+    default_gate_stale_days = int(settings.get("fundamental_gate_stale_after_days", 45))
+
+    candidates: List[Tuple[int, float, List[str]]] = []
+    near_misses: List[Tuple[int, float, List[str]]] = []
+    for ticker, asset in universe.items():
+        if ticker in set(benchmark_by_region.values()):
+            continue
+        try:
+            quote = get_quote(ticker, quote_cache)
+        except Exception:
+            continue
+
+        close = quote.close_history.dropna()
+        volume = quote.volume_history
+        if volume is None:
+            continue
+        volume = volume.dropna()
+        common_index = close.index.intersection(volume.index)
+        close = close.loc[common_index]
+        volume = volume.loc[common_index]
+        if len(close) < prior_lookback + base_days + 2:
+            continue
+
+        base_close = close.iloc[-base_days:]
+        base_volume = volume.iloc[-base_days:]
+        prior_close = close.iloc[-(prior_lookback + base_days) : -base_days]
+        prior_volume = volume.iloc[-(20 + base_days) : -base_days]
+        if prior_close.empty or prior_volume.empty:
+            continue
+
+        prior_low = float(prior_close.min())
+        base_low = float(base_close.min())
+        base_high = float(base_close.max())
+        advance = (quote.last / prior_low - 1) * 100
+        base_range = (base_high / base_low - 1) * 100 if base_low > 0 else 999.0
+        accepted_higher_floor = (
+            min_advance <= advance <= max_advance
+            and base_range <= max_base_range
+            and base_low >= prior_low * (1 + min_floor_lift / 100)
+        )
+
+        base_returns = base_close.pct_change()
+        down_mask = base_returns < 0
+        up_mask = base_returns > 0
+        prior_avg_volume = float(prior_volume.mean())
+        down_avg = float(base_volume.loc[down_mask].mean()) if down_mask.any() else 0.0
+        up_avg = float(base_volume.loc[up_mask].mean()) if up_mask.any() else 0.0
+        pullback_volume_contracts = down_avg == 0.0 or down_avg <= prior_avg_volume * max_down_volume
+        up_volume_dominates = bool(
+            up_mask.sum() >= 2 and (down_avg == 0.0 or up_avg >= down_avg * min_up_down_volume)
+        )
+
+        midpoint = max(2, base_days // 2)
+        first_low = float(base_close.iloc[:midpoint].min())
+        second_low = float(base_close.iloc[midpoint:].min())
+        higher_lows = second_low >= first_low * (1 - higher_low_tolerance / 100)
+
+        region = asset.get("region", "")
+        if not region or region == "Watchlist":
+            if ticker.endswith(".HK"):
+                region = "Hong Kong"
+            elif ticker.endswith((".PA", ".DE", ".AS", ".MI", ".MC", ".L", ".SW", ".CO")):
+                region = "Europe"
+            elif ticker.endswith(".KS"):
+                region = "Korea"
+            else:
+                region = "US"
+        benchmark_ticker = benchmark_by_region.get(region, benchmark_by_region.get("US", "QQQ"))
+        benchmark_10d = benchmark_returns.get(region, benchmark_returns["US"])
+        stock_10d = trailing_return(quote, 10)
+        relative_strength = stock_10d - benchmark_10d if stock_10d is not None else -999.0
+        beats_market = relative_strength >= min_relative
+
+        checks = [accepted_higher_floor, pullback_volume_contracts, up_volume_dominates, higher_lows, beats_market]
+        passes = sum(1 for check in checks if check)
+        position = one_year_position_ratio(quote)
+        drawdown = one_year_drawdown_pct(quote)
+        return_20d = trailing_return(quote, 20)
+        not_extended = (
+            position is not None
+            and position <= max_1y_position
+            and drawdown is not None
+            and drawdown <= min_drawdown
+            and (return_20d is None or return_20d <= max_20d_gain)
+        )
+
+        evidence = (
+            f"现价 {quote.last:.2f}；5日 {pct_line(quote.five_day_pct)}；低点后 {advance:+.1f}%；平台振幅 {base_range:.1f}%；"
+            f"10日相对{benchmark_ticker} {relative_strength:+.1f}pct；距一年高点 {drawdown:+.1f}%"
+            if drawdown is not None
+            else f"现价 {quote.last:.2f}；5日 {pct_line(quote.five_day_pct)}；低点后 {advance:+.1f}%；平台振幅 {base_range:.1f}%；10日相对{benchmark_ticker} {relative_strength:+.1f}pct"
+        )
+        check_text = (
+            f"平台{'通过' if accepted_higher_floor else '未通过'}；"
+            f"回调量{'缩' if pullback_volume_contracts else '未缩'}；"
+            f"上涨量{'占优' if up_volume_dominates else '不足'}；"
+            f"低点{'抬高' if higher_lows else '下移'}；"
+            f"相对强度{'通过' if beats_market else '落后'}"
+        )
+        name = asset.get("name") or stock_map.get(ticker, {}).get("name") or ticker
+        gate = fundamental_gates.get(ticker, {})
+        gate_status = str(gate.get("status", "manual_review")).lower()
+        gate_age = snapshot_age_days(gate.get("as_of", "")) if gate else None
+        gate_is_stale = bool(
+            gate
+            and (gate_age is None or gate_age > int(gate.get("stale_after_days", default_gate_stale_days)))
+        )
+        gate_note = trim_text(gate.get("note", ""), 105)
+        if gate_is_stale:
+            gate_status = "blocked"
+            gate_note = "基本面快照已过期，必须先更新财报、指引、FCF和信用数据。"
+        gate_blocked = gate_status == "blocked"
+        gate_action = (
+            f"基本面闸门未通过：{gate_note}"
+            if gate_blocked
+            else (
+                f"基本面仍需复核：{gate_note}"
+                if gate_note
+                else "先核对最新财报、指引、订单/需求、FCF、信用与估值空间。"
+            )
+        )
+        row = [
+            f"{name} ({ticker})",
+            f"{passes}/5；{evidence}",
+            check_text,
+            gate_action + (" 不推荐加仓。" if gate_blocked else " 通过后只加小于首仓的一笔。"),
+        ]
+
+        if (
+            accepted_higher_floor
+            and higher_lows
+            and beats_market
+            and passes >= min_passes
+            and not_extended
+            and not gate_blocked
+        ):
+            candidates.append((passes, relative_strength, row))
+        elif passes >= max(3, min_passes - 1):
+            near_misses.append((passes, relative_strength, row))
+
+    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    near_misses.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    selected = candidates[: int(settings.get("max_candidates_per_email", 3))]
+
+    if not selected:
+        if settings.get("show_near_misses", False) and near_misses:
+            rows = [item[2] for item in near_misses[:2]]
+            return (
+                "暂无可执行候选；以下仅为接近达标的观察项。\n\n"
+                + markdown_table(["标的", "量价评分", "五项检查", "动作"], rows),
+                False,
+                [],
+            )
+        return "", False, []
+
+    rows = [item[2] for item in selected]
+    highlights = [
+        [row[0], row[1], row[3]]
+        for row in rows
+    ]
+    section = "\n".join(
+        [
+            "只推荐已经从低位启动、形成更高平台且量价相对强的标的。自动扫描不能证明基本面未坏，因此下单前必须完成人工闸门。",
+            markdown_table(["标的", "量价评分", "五项检查", "交易前闸门"], rows),
+        ]
+    )
+    return section, True, highlights
+
+
 def one_year_drawdown_pct(quote: Quote) -> Optional[float]:
     high = history_window_max(quote, 1)
     if high is None or high <= 0:
@@ -1965,7 +2282,7 @@ def elite_franchise_reset_watch(config: Dict[str, Any], quote_cache: Dict[str, Q
     quiet_volume = float(settings.get("seller_exhaustion_volume_ratio", 0.8))
     buyer_daily = float(settings.get("buyer_confirmation_daily_pct", 1.0))
     buyer_volume = float(settings.get("buyer_confirmation_volume_ratio", 1.3))
-    rows: List[List[str]] = []
+    candidates: List[Tuple[int, Dict[str, Any], str, str, str, str, str]] = []
 
     for ticker, (group_name, required_checks) in ticker_groups.items():
         stock = stock_map.get(ticker)
@@ -1983,30 +2300,39 @@ def elite_franchise_reset_watch(config: Dict[str, Any], quote_cache: Dict[str, Q
         if quote.daily_pct <= panic_daily and ratio is not None and ratio >= panic_volume:
             phase = "第一轮主动抛售 / active liquidation"
             action = "不加仓；这是风险释放，不是确认底部。等待卖压衰竭。"
+            priority = 2
         elif quote.daily_pct >= buyer_daily and ratio is not None and ratio >= buyer_volume:
             phase = "买方开始确认 / buyer confirmation"
             action = "红旗核查通过后，可考虑第一笔很小的分批仓位；不要一次买满。"
+            priority = 0
         elif quote.daily_pct <= 0 and ratio is not None and ratio <= quiet_volume:
             phase = "卖压衰竭观察 / seller exhaustion watch"
             action = "进入重点研究；等不创新低或放量收复关键价位，再决定是否分批。"
+            priority = 1
         else:
-            phase = "深回撤，尚未确认 / deep reset, unconfirmed"
-            action = "只做基本面与信用核查；等待量价给出下一步证据。"
+            continue
+        candidates.append(
+            (priority, stock, group_name, required_checks, phase, action, f"距一年高点 {drawdown:+.1f}%；今日 {quote.daily_pct:+.1f}%；量 {ratio_text}")
+        )
+
+    if not candidates:
+        return "", False
+
+    rows: List[List[str]] = []
+    limit = int(settings.get("max_candidates_per_email", 2))
+    for _, stock, group_name, required_checks, phase, action, price_context in sorted(candidates, key=lambda item: item[0])[:limit]:
         red_flag = trim_text(plain_text(red_flag_news_check(stock)), 95)
         rows.append(
             [
                 group_name,
-                f"{stock['name']} ({ticker})",
-                f"距一年高点 {drawdown:+.1f}%；今日 {quote.daily_pct:+.1f}%；量 {ratio_text}",
+                f"{stock['name']} ({stock['ticker']})",
+                price_context,
                 phase,
                 trim_text(required_checks, 115) + "<br>新闻筛查：" + red_flag,
                 action,
             ]
         )
 
-    if not rows:
-        return "", False
-    rows = rows[: int(settings.get("max_candidates_per_email", 4))]
     lines = [
         settings.get("principle", "旗舰资产大跌是研究机会，不是自动加仓理由。"),
         markdown_table(["类别", "标的", "回撤/量价", "阶段", "必须核对", "建议"], rows),
@@ -2103,11 +2429,11 @@ def breakthrough_product_watch(
     return f"{settings.get('principle', '')}\n\n{table}", triggered
 
 
-def market_mover_watch(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> str:
+def market_mover_watch(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> Tuple[str, bool]:
     """Rank a curated, liquid global leadership universe instead of noisy all-market penny-stock movers."""
     settings = config.get("market_mover_watch", {})
     if not settings.get("enabled", False):
-        return ""
+        return "", False
 
     configured_stocks = {stock.get("ticker"): stock for stock in config.get("stocks", [])}
     movers: List[Tuple[Dict[str, Any], Quote]] = []
@@ -2119,7 +2445,7 @@ def market_mover_watch(config: Dict[str, Any], quote_cache: Dict[str, Quote]) ->
         except Exception:
             continue
     if not movers:
-        return "全球旗舰资产榜数据不足 / Global mover board has insufficient data."
+        return "", False
 
     def table_rows(items: List[Tuple[Dict[str, Any], Quote]]) -> List[List[str]]:
         rows: List[List[str]] = []
@@ -2145,39 +2471,44 @@ def market_mover_watch(config: Dict[str, Any], quote_cache: Dict[str, Quote]) ->
             )
         return rows
 
-    count = int(settings.get("max_rows", 10))
-    gainers = sorted(movers, key=lambda item: item[1].daily_pct, reverse=True)[:count]
-    losers = sorted(movers, key=lambda item: item[1].daily_pct)[:count]
-    external_movers = [item for item in movers if item[0]["ticker"] not in configured_stocks]
-    external_count = int(settings.get("external_max_rows", 5))
-    external_spotlight = sorted(external_movers, key=lambda item: abs(item[1].daily_pct), reverse=True)[:external_count]
-    lines = [
-        settings.get("note", "精选资产排行榜，不是全交易所原始涨跌榜。"),
-        "",
-        "综合涨幅前十 / Overall Top 10 Gainers",
-        markdown_table(["资产", "地区/类型", "涨跌", "成交量", "一年位置", "覆盖"], table_rows(gainers)),
-        "",
-        "综合跌幅前十 / Overall Top 10 Losers",
-        markdown_table(["资产", "地区/类型", "涨跌", "成交量", "一年位置", "覆盖"], table_rows(losers)),
-    ]
-    if external_spotlight:
-        lines.extend(
-            [
-                "",
-                "名单外机会雷达 / External Opportunity Radar",
-                markdown_table(
-                    ["资产", "地区/类型", "涨跌", "成交量", "一年位置", "结论"],
-                    [
-                        row[:-1]
-                        + [
-                            "外部候选：若大跌，进入基本面/信用/量价复核；若大涨，先判断是否已过热。"
-                        ]
-                        for row in table_rows(external_spotlight)
-                    ],
-                ),
-            ]
-        )
-    return "\n".join(lines)
+    min_move = float(settings.get("min_abs_daily_move_pct", 4.0))
+    min_volume = float(settings.get("min_abnormal_volume_ratio", 1.8))
+    volume_move = float(settings.get("abnormal_volume_min_move_pct", 2.5))
+    deep_drawdown = float(settings.get("deep_reset_drawdown_pct", -20.0))
+    deep_daily = float(settings.get("deep_reset_daily_drop_pct", -2.0))
+
+    actionable: List[Tuple[Dict[str, Any], Quote]] = []
+    for asset, quote in movers:
+        ratio = volume_ratio(quote)
+        drawdown = one_year_drawdown_pct(quote)
+        abnormal_move = abs(quote.daily_pct) >= min_move
+        abnormal_tape = ratio is not None and ratio >= min_volume and abs(quote.daily_pct) >= volume_move
+        deep_reset = drawdown is not None and drawdown <= deep_drawdown and quote.daily_pct <= deep_daily
+        if abnormal_move or abnormal_tape or deep_reset:
+            actionable.append((asset, quote))
+
+    if not actionable:
+        return "", False
+
+    count = int(settings.get("max_rows", 5))
+    actionable.sort(key=lambda item: abs(item[1].daily_pct), reverse=True)
+    selected = actionable[:count]
+    rows = table_rows(selected)
+    for index, (asset, quote) in enumerate(selected):
+        drawdown = one_year_drawdown_pct(quote)
+        if quote.daily_pct < 0 and drawdown is not None and drawdown <= deep_drawdown:
+            conclusion = "深回撤亮点：先查基本面；未止跌前不接第一刀。"
+        elif quote.daily_pct < 0:
+            conclusion = "异常下跌：判断是事件冲击还是基本面下修。"
+        else:
+            conclusion = "异常上涨：不追价；持仓则检查止盈。"
+        rows[index][-1] = conclusion
+    return "\n".join(
+        [
+            settings.get("note", "只显示异常异动。"),
+            markdown_table(["资产", "地区/类型", "涨跌", "成交量", "一年位置", "判断"], rows),
+        ]
+    ), True
 
 
 def china_recovery_watch(config: Dict[str, Any], quote_cache: Dict[str, Quote]) -> str:
@@ -2454,7 +2785,14 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
     name = stock["name"]
     is_held = stock.get("position", 0) > 0
 
-    if stock.get("daily_volume_watch", {}).get("enabled", False):
+    ratio = volume_ratio(quote)
+    position = one_year_position_ratio(quote)
+    daily_watch_is_material = (
+        abs(quote.daily_pct) >= float(global_rules.get("daily_watch_min_abs_move_pct", 2.5))
+        or (ratio is not None and ratio >= float(global_rules.get("daily_watch_min_volume_ratio", 1.5)))
+        or (position is not None and position <= float(global_rules.get("early_value_max_1y_position", 0.25)))
+    )
+    if stock.get("daily_volume_watch", {}).get("enabled", False) and daily_watch_is_material:
         read, decision = daily_volume_watch_readout(stock, quote)
         rows.append(
             [
@@ -2466,7 +2804,16 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
             ]
         )
 
-    if stock.get("overhang_watch", {}).get("enabled", True) and should_expand_overhang_watch(stock, quote):
+    overhang_is_material = (
+        abs(quote.daily_pct) >= 3.0
+        or (quote.five_day_pct is not None and abs(quote.five_day_pct) >= 8.0)
+        or (position is not None and (position <= 0.20 or position >= 0.75))
+    )
+    if (
+        stock.get("overhang_watch", {}).get("enabled", True)
+        and should_expand_overhang_watch(stock, quote)
+        and overhang_is_material
+    ):
         read, decision = overhang_watch_readout(stock, quote)
         rows.append(
             [
@@ -2481,6 +2828,31 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
     entry_row = entry_alert_row(stock, quote)
     if entry_row:
         rows.append(entry_row)
+
+    drawdown = one_year_drawdown_pct(quote)
+    early_value = (
+        position is not None
+        and position <= float(global_rules.get("early_value_max_1y_position", 0.25))
+        and drawdown is not None
+        and drawdown <= float(global_rules.get("buy_min_drawdown_from_1y_high_pct", -15.0))
+        and (
+            quote.daily_pct <= float(global_rules.get("early_value_daily_drop_pct", -3.0))
+            or (
+                quote.five_day_pct is not None
+                and quote.five_day_pct <= float(global_rules.get("early_value_max_5d_pct", -5.0))
+            )
+        )
+    )
+    if early_value and not entry_row:
+        rows.append(
+            [
+                f"{name} ({stock['ticker']})",
+                "提前埋伏研究 / early value watch",
+                quote_metrics_inline(quote),
+                f"一年位置 {position:.0%}，距一年高点 {drawdown:+.1f}%；价格仍在下跌阶段，先于反弹进入研究。",
+                "先核对盈利、现金流和信用；等缩量不创新低或买方确认后再下第一笔。",
+            ]
+        )
 
     if is_held and quote.daily_pct >= global_rules["stock_big_up_daily_pct"]:
         rows.append(
@@ -2504,7 +2876,6 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
             ]
         )
 
-    ratio = volume_ratio(quote)
     rerating_volume = ratio is not None and ratio >= global_rules["confirmed_rerating_volume_ratio_min"]
     rerating_daily = quote.daily_pct >= global_rules["confirmed_rerating_daily_pct"]
     rerating_5d = quote.five_day_pct is not None and quote.five_day_pct >= global_rules["confirmed_rerating_5d_pct"]
@@ -2520,10 +2891,11 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
         )
 
     tolerance = 1 + global_rules["historic_low_tolerance_pct"] / 100
+    low_rows: List[List[str]] = []
     for years in global_rules.get("historic_low_lookback_years", []):
         low = history_window_min(quote, int(years))
         if low is not None and quote.last <= low * tolerance:
-            rows.append(
+            low_rows.append(
                 [
                     f"{name} ({stock['ticker']})",
                     f"接近{years}年低位 / near {years}Y low",
@@ -2532,6 +2904,22 @@ def stock_signal_rows(stock: Dict[str, Any], quote: Quote, global_rules: Dict[st
                     "进入投研优先区；先判断是错杀还是价值陷阱，再考虑分批",
                 ]
             )
+
+    if low_rows:
+        rows.append(low_rows[-1])
+
+    timing_ok, timing_reason = buy_timing_gate(quote, global_rules)
+    buy_keywords = ("deep pullback", "低位", "early value", "提前埋伏", "建仓")
+    if not timing_ok:
+        for row in rows:
+            if any(keyword in row[1].lower() for keyword in buy_keywords):
+                row[1] = "价格已离开低位 / wait for pullback"
+                row[3] = f"原始低位逻辑仍可研究，但当前信号已滞后：{timing_reason}。"
+                row[4] = "禁止追价；重新计算回撤买点，等待至少8%-12%回撤或新的卖压衰竭。"
+
+    # A late signal is not actionable. Do not spend an email row explaining
+    # why the reader should do nothing.
+    rows = [row for row in rows if "价格已离开低位" not in row[1]]
 
     return rows
 
@@ -2722,7 +3110,7 @@ def market_sentiment_decision(
 
 
 def market_sentiment_section(decision: Dict[str, Any]) -> str:
-    table = markdown_table(
+    return markdown_table(
         ["CNN Fear & Greed", "VIX", "低吸准备度", "联合判断", "今日动作"],
         [[
             decision["cnn_text"],
@@ -2732,14 +3120,6 @@ def market_sentiment_section(decision: Dict[str, Any]) -> str:
             decision["action_short"],
         ]],
     )
-    explanation = (
-        "口径：CNN反映市场广度、动量、信用与避险等综合情绪；VIX反映未来约30天标普500期权保护的价格。"
-        "VIX是主触发器，CNN用于确认。评级衡量低吸准备度，不代表市场安全，也不是自动买单。"
-        "任何建仓必须先确认收入/订单、利润率、FCF、债务/信用和竞争地位没有实质恶化。\n"
-        "Method: CNN measures broad composite sentiment; VIX prices roughly 30-day S&P 500 option protection. "
-        "VIX is the primary trigger and CNN is confirmation. The score measures dip-buy readiness, not safety or an automatic order."
-    )
-    return f"{table}\n\n{explanation}"
 
 
 def stock_by_name(config: Dict[str, Any], name: str) -> Optional[Dict[str, Any]]:
@@ -2845,7 +3225,8 @@ def check_rotation_engine(config: Dict[str, Any], quote_cache: Dict[str, Quote])
     for stock in buy_stocks:
         quote = get_quote(stock["ticker"], quote_cache)
         buy_reasons = buy_opportunity_reasons(stock, quote, global_rules)
-        if buy_reasons:
+        timing_ok, _ = buy_timing_gate(quote, global_rules)
+        if buy_reasons and timing_ok:
             buy_candidates.append((stock, quote, buy_reasons))
 
     pair_rows: List[List[str]] = []
@@ -2925,8 +3306,14 @@ def check_rotation_signal(signal: Dict[str, Any]) -> List[str]:
         to_low_ok = low is not None and to_quote.last <= low * tolerance
 
     to_opportunity_ok = to_price_ok or to_5d_ok or to_low_ok
+    timing_ok, _ = buy_timing_gate(to_quote, {
+        "buy_max_1y_position": 0.35,
+        "buy_max_5d_gain_pct": 3.0,
+        "buy_max_20d_gain_pct": 8.0,
+        "buy_min_drawdown_from_1y_high_pct": -15.0,
+    })
 
-    if not (from_strength_ok and to_opportunity_ok):
+    if not (from_strength_ok and to_opportunity_ok and timing_ok):
         return alerts
 
     red_flags = guardrail.get("red_flags", [])
@@ -2994,6 +3381,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
             )
 
     market_scan_section = ""
+    market_scan_triggered = False
     try:
         market_scan_section, market_scan_triggered = market_rotation_scan(config, quote_cache)
         triggered = triggered or market_scan_triggered
@@ -3003,7 +3391,22 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
             f"Market rotation scan failed: {exc}",
         )
 
+    confirmed_add_section = ""
+    confirmed_add_triggered = False
+    confirmed_add_highlights: List[List[str]] = []
+    try:
+        confirmed_add_section, confirmed_add_triggered, confirmed_add_highlights = confirmed_add_scan(
+            config, quote_cache
+        )
+        triggered = triggered or confirmed_add_triggered
+    except Exception as exc:
+        confirmed_add_section = bilingual(
+            f"确认型向上加仓扫描失败：{exc}",
+            f"Confirmed averaging-up scan failed: {exc}",
+        )
+
     elite_reset_section = ""
+    elite_reset_triggered = False
     try:
         elite_reset_section, elite_reset_triggered = elite_franchise_reset_watch(config, quote_cache)
         triggered = triggered or elite_reset_triggered
@@ -3024,11 +3427,16 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
             f"Breakthrough-product watch failed: {exc}",
         )
 
-    market_mover_section = market_mover_watch(config, quote_cache)
-    if config.get("market_mover_watch", {}).get("send_daily_email", False):
-        triggered = True
+    market_mover_section, market_mover_triggered = market_mover_watch(config, quote_cache)
+    triggered = triggered or market_mover_triggered
 
     china_recovery_section = china_recovery_watch(config, quote_cache)
+    china_recovery_triggered = (
+        "低吸研究许可" in china_recovery_section
+        or "暂停加仓" in china_recovery_section
+        or "favorable" in china_recovery_section
+        or "unfavorable" in china_recovery_section
+    )
 
     stock_rows: List[List[str]] = []
     stock_errors: List[str] = []
@@ -3090,7 +3498,11 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         triggered = triggered or sentiment_decision["triggered"]
 
     influencer_rows: List[List[str]] = []
-    if config.get("influencer_watch", {}).get("enabled", False) and should_include_influencer_section(rotation_alerts, stock_rows):
+    if (
+        layout.get("show_influencer_radar", False)
+        and config.get("influencer_watch", {}).get("enabled", False)
+        and should_include_influencer_section(rotation_alerts, stock_rows)
+    ):
         try:
             influencer_rows = influencer_latest_rows(config)
         except Exception as exc:
@@ -3104,58 +3516,113 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
                 ]
             ]
 
-    has_any_signal = bool(rotation_alerts or stock_rows or stock_errors or indicator_alerts or sentiment_section or market_scan_section or elite_reset_section or breakthrough_section or market_mover_section or china_recovery_section)
+    has_any_signal = bool(
+        rotation_alerts
+        or stock_rows
+        or stock_errors
+        or indicator_alerts
+        or (sentiment_decision and sentiment_decision.get("triggered"))
+        or market_scan_triggered
+        or confirmed_add_triggered
+        or elite_reset_triggered
+        or breakthrough_triggered
+        or market_mover_triggered
+        or china_recovery_triggered
+    )
 
-    lines.append("## 今日结论 / Today's Conclusion")
-    lines.append(executive_summary(rotation_alerts, stock_rows, indicator_alerts, sentiment_decision))
+    lines.append("## 今日亮点 / Today's Highlights")
+    excluded_highlight_tickers = set(layout.get("highlight_excluded_tickers", []))
+    highlight_stock_rows = [
+        row
+        for row in stock_rows
+        if not any(f"({ticker})" in row[0] for ticker in excluded_highlight_tickers)
+    ]
+    structural_standard = config.get("advisor_research", {}).get("structural_disruption_standard", {})
+    structural_priority_tickers = set(structural_standard.get("tier_a_priority_tickers", []))
+    lines.append(
+        today_highlights(
+            highlight_stock_rows,
+            sentiment_decision,
+            rotation_alerts,
+            market_mover_triggered,
+            elite_reset_triggered,
+            market_scan_triggered,
+            breakthrough_triggered,
+            confirmed_add_highlights=confirmed_add_highlights,
+            max_rows=int(layout.get("max_highlights", 3)),
+            priority_tickers=structural_priority_tickers,
+        )
+    )
     lines.append("")
 
-    if sentiment_section:
+    if layout.get("compact_digest", True):
+        if not has_any_signal:
+            lines.append("结论：今天没有达到决策级别的新信号，继续观察，不为写邮件而交易。")
+        if indicator_alerts:
+            lines.append("## 其他硬预警 / Other Hard Alerts")
+            lines.append(
+                markdown_table(
+                    ["指标", "核心信号"],
+                    [
+                        [trim_text(plain_text(alert).split()[0], 30), trim_text(plain_text(alert), 110)]
+                        for alert in indicator_alerts[:2]
+                    ],
+                )
+            )
+            lines.append("")
+        quality_report = fetch_quality_report()
+        if quality_report:
+            lines.append(quality_report)
+        return "\n".join(lines), triggered
+
+    show_sentiment = bool(sentiment_section) and (
+        not layout.get("show_sentiment_only_when_triggered", True)
+        or bool(sentiment_decision and sentiment_decision.get("triggered"))
+    )
+    if show_sentiment:
         lines.append("## 市场情绪与低吸评级 / Sentiment")
         lines.append(sentiment_section)
         lines.append("")
 
-    if market_mover_section:
+    if market_mover_section and (
+        not layout.get("show_market_movers_only_when_actionable", True) or market_mover_triggered
+    ):
         lines.append("## 全球旗舰资产异动榜 / Global Movers")
         lines.append(market_mover_section)
         lines.append("")
 
-    if china_recovery_section:
+    if china_recovery_section and (
+        not layout.get("show_china_only_when_actionable", True) or china_recovery_triggered
+    ):
         lines.append("## 中概持仓四因子 / China Four-Factor Watch")
         lines.append(china_recovery_section)
         lines.append("")
 
-    if rotation_alerts or stock_rows:
-        lines.append("## 可执行信号 / Actionable Signals")
-        if stock_rows:
-            lines.append(
-                concise_signal_briefs(
-                    stock_rows,
-                    max_rows=int(layout.get("max_actionable_signals", 4)),
-                )
-            )
-            lines.append("")
-        if rotation_alerts:
-            lines.append("重点调仓候选 / Rotation Candidates")
-            lines.append("\n\n".join(rotation_alerts[:2]))
+    if rotation_alerts:
+        lines.append("## 调仓候选 / Rotation")
+        lines.append("\n\n".join(rotation_alerts[:1]))
         lines.append("")
 
-    if elite_reset_section:
+    if elite_reset_section and elite_reset_triggered:
         lines.append("## 旗舰资产深回撤 / Elite Franchise Reset")
         lines.append(elite_reset_section)
         lines.append("")
 
-    if breakthrough_section and (
-        config.get("breakthrough_product_watch", {}).get("show_daily", True)
-        or breakthrough_triggered
-    ):
+    if breakthrough_section and breakthrough_triggered:
         lines.append("## 划时代产品兑现 / Breakthrough Product Watch")
         lines.append(breakthrough_section)
         lines.append("")
 
-    if market_scan_section:
+    if market_scan_section and (
+        not layout.get("show_market_scan_only_when_triggered", True) or market_scan_triggered
+    ):
         lines.append("## 赛道轮动扫描 / Market Rotation Scan")
         lines.append(market_scan_section)
+        lines.append("")
+
+    if confirmed_add_section and confirmed_add_triggered:
+        lines.append("## 确认型向上加仓 / Confirmed Add Scan")
+        lines.append(confirmed_add_section)
         lines.append("")
 
     decision_memos = (
@@ -3168,8 +3635,8 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append(decision_memos)
         lines.append("")
 
-    supplemental_stock_rows = top_signal_rows(stock_rows, max_rows=10)[4:] if stock_rows else []
-    if supplemental_stock_rows or stock_errors:
+    supplemental_stock_rows = top_signal_rows(stock_rows, max_rows=10)[3:] if stock_rows else []
+    if layout.get("show_additional_watch", False) and (supplemental_stock_rows or stock_errors):
         lines.append("## 补充观察 / Additional Watch")
         if supplemental_stock_rows:
             lines.append(tight_portfolio_diagnosis(supplemental_stock_rows, max_names=6))
@@ -3184,10 +3651,11 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
             )
         lines.append("")
 
-    geo_section = compact_geopolitical_themes(config, quote_cache)
-    regime_section = portfolio_regime_table(config, quote_cache) if (rotation_alerts or stock_rows) else ""
+    show_temperature = layout.get("show_market_temperature", False) or bool(indicator_alerts)
+    geo_section = compact_geopolitical_themes(config, quote_cache) if show_temperature else ""
+    regime_section = portfolio_regime_table(config, quote_cache) if show_temperature and (rotation_alerts or stock_rows) else ""
 
-    if indicator_alerts or geo_section or regime_section:
+    if show_temperature and (indicator_alerts or geo_section or regime_section):
         lines.append("## 市场温度 / Market Temperature")
         if regime_section:
             lines.append(regime_section)
@@ -3213,7 +3681,7 @@ def build_report(config: Dict[str, Any]) -> Tuple[str, bool]:
         lines.append(omitted_section)
         lines.append("")
 
-    if influencer_rows:
+    if influencer_rows and layout.get("show_influencer_radar", False):
         lines.append("## 高手雷达 / Influencer Radar")
         lines.append(influencer_blocks(influencer_rows[:3]))
         lines.append("")

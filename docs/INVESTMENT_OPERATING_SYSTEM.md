@@ -10,6 +10,22 @@ The preferred entry is not simply a falling stock. It is:
 
 The system is deliberately conservative about what automation can know. Price, volume, range position, public headlines, and market proxies are screening evidence. They do not prove forward earnings, free cash flow, credit safety, or intrinsic value.
 
+## Structural Category Creator Standard
+
+The preferred company does more than grow inside an attractive industry. It owns a system capability that competitors cannot reproduce at comparable scale within roughly three to five years, and it is using that capability to replace an old product, workflow, or profit pool.
+
+| Gate | Required evidence |
+|---|---|
+| Unique system capability | At least two reinforcing barriers among technology, cost, scale, data, ecosystem, distribution, regulation, customer workflow, or supply chain |
+| Structural replacement | The old solution is losing usage, economics, or strategic relevance because of the new one |
+| Proven leadership | Market share, installed base, developer/customer dependence, orders, or utilization demonstrates leadership |
+| Profit-pool migration | Revenue, gross profit, FCF, orders, or pricing power shows value moving to the company |
+| Durability | The advantage can survive customer insourcing, substitutes, regulation, capital requirements, and at least one industry cycle |
+
+This is not a synonym for innovation. A prototype without scaled delivery and unit economics fails. A fast-growing market without company-specific share and pricing power fails. A great company at a price that already assumes full success also fails the investment test. Company quality and entry timing are scored separately.
+
+Current Tier-A research priorities are ASML, Nvidia, SpaceX, CATL, TSMC, and Axon. Apple is a historical archetype but needs a new category-creation cycle to regain Tier-A status. PDD, Palantir, Broadcom, Microsoft, BYD, and Bafang remain Tier-B because their advantages are meaningful but less exclusive, less proven as structural replacement, or more exposed to capable alternatives.
+
 ## Portfolio Architecture
 
 | Bucket | Purpose | Typical names | Rule |
@@ -141,6 +157,22 @@ The bot treats price-volume as evidence of flow, not as a substitute for busines
 | Bad news without a new low | The market may have already discounted the news | Look for a catalyst and buyer confirmation |
 | Strong up day with 1.5x+ normal volume | Buyers may be validating a re-rating | Verify the fundamental trigger; do not blindly chase |
 | Strong stock near overhead supply | Break-even selling can cap the move | Consider trim/review instead of adding |
+
+## Confirmed Averaging-Up Protocol
+
+The bot distinguishes confirmation from chasing. After a low-zone entry, a higher-priced add is allowed for research only when the market has accepted a higher range rather than merely produced a one-day rebound.
+
+| Gate | Automated evidence |
+|---|---|
+| Higher price regime | Price is 10%-35% above a prior low and the new 10-session floor is at least 5% above that low |
+| Stable base | The 10-session closing range is no wider than 10% |
+| Seller control fades | Average volume on down days contracts versus the preceding period |
+| Buyer participation | Up-day volume exceeds down-day volume and at least two up days occur in the base |
+| Rising lows | The second half of the base does not undercut the first half beyond a small tolerance |
+| Relative strength | The stock beats its regional benchmark over 10 sessions: QQQ, VGK, Hang Seng, or KOSPI |
+| Anti-chase | The stock is not near its one-year high and has not already made an excessive 20-day move |
+
+A technical pass never proves that fundamentals are intact. Before adding, review the latest earnings, guidance, orders or demand, FCF, credit, valuation upside, and stock-specific invalidation. The added tranche must be smaller than the initial tranche.
 
 ## Macro and Credit Filter
 

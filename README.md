@@ -39,20 +39,11 @@ CNN `<= 24` adds confirmation and can raise the rating by one point. The rating 
 
 ## Email Style
 
-Alert emails are written as a CEO investment brief, not a machine log. Each alert tries to explain:
+Alert emails use a compact CEO format: at most three non-duplicated highlights, each with the evidence and the decision. Research notes, recurring explanations, unchanged watch items, and non-actionable sections stay in the engine instead of filling the email. The data-quality summary appears only when there is a warning or failure.
 
-- the conclusion first
-- what happened
-- why it matters
-- what the signal means in plain language
-- what decision may be worth considering as CEO
-- what fundamental red flags should be checked before approving action
+Buy and rotation signals also pass an anti-chasing gate. A candidate is rejected after a material rebound, in the upper part of its one-year range, or too close to its one-year high. The scanner separately flags early-value research while prices are still low and falling, so confirmation validates an idea instead of discovering it after the move.
 
-Technical terms are explained briefly in the email. For example, volume is described as market participation/attention, and a market-confirmed re-rating is explained as price plus volume showing that real money may be repricing the asset.
-
-The tone is deliberately direct: recommendation, rationale, decision condition, and risk guardrail.
-
-Repeated boilerplate is disabled by default through `email_layout`: routine experience reminders, the no-highlight list, and the full eight-gate memo stay out of the daily brief. The underlying rules remain documented and can be re-enabled when needed. The daily email keeps the conclusion, core tables, abnormal price/volume evidence, and decision conditions.
+The daily run also scans for **confirmed averaging-up** opportunities. A stock must have advanced at least 10% from a prior low, held a higher 10-session base, shown contracting volume on pullbacks, stronger participation on up days, rising lows, and positive 10-day relative strength versus its regional benchmark (QQQ, VGK, Hang Seng, or KOSPI). The signal is blocked when the stock is too extended or too close to its one-year high. It is always a research recommendation: the latest earnings, guidance, orders, free cash flow, credit, and remaining valuation upside must still be checked manually before adding.
 
 ## Investment Framework v2
 
@@ -61,6 +52,8 @@ The bot is now built around one question: is this a genuine mispricing with an i
 For a real opportunity, it requires more than a low price. The desired setup is:
 
 `fundamentals intact + seller exhaustion or buyer confirmation + valuation gap + catalyst + defined invalidation`
+
+The framework also prioritizes **structural category creators**. These companies must combine a system capability that competitors cannot reproduce at scale within roughly three to five years, clear replacement of an old product or profit pool, proven leadership, evidence that economics are migrating to the company, and an advantage likely to survive at least one industry cycle. Novel technology alone does not qualify. Company quality and entry price remain separate scores, so even a category creator must still pass the valuation, drawdown, fundamental, volume, and invalidation gates.
 
 For the highest-priority buy, add, re-rating, and strength signals, the email includes a fixed bilingual eight-gate review:
 
@@ -109,7 +102,7 @@ SpaceX is now monitored through the official `SPCX` listing. The bot treats it a
 
 ## Global Leadership Movers
 
-Every daily email includes a top-10 gainers and top-10 losers board drawn from a curated global universe of liquid leaders, mega caps, franchise names, and selected high-potential assets across the U.S., Europe, and Hong Kong. It labels each name as held, already tracked, or an external candidate.
+The bot scans a curated global universe of liquid leaders, mega caps, franchise names, and selected high-potential assets across the U.S., Europe, and Hong Kong. The daily email only surfaces abnormal moves, unusual volume, or deep resets; it no longer prints routine top-10 lists.
 
 This is intentionally not an all-exchange ranking: raw market mover lists are dominated by low-float and low-liquidity names, which do not fit this strategy. The board is a discovery layer. Gainers identify emerging leadership and potential no-chase/trim zones; losers enter the fundamental, credit, and price-volume review process before any purchase is considered.
 
@@ -224,7 +217,7 @@ For example, Meituan can still appear as a possible low-buy opportunity, but it 
 | `EMAIL_TO` | receiver email |
 
 4. Edit `config/watchlist.yml` with your own tickers, thresholds, and notes.
-5. The workflow runs Monday-Friday at 16:45 Paris time by default, after European markets close and before/around the U.S. session.
+5. The workflow is scheduled at `07:00 UTC` each day, which is `09:00` in Paris during summer time (`08:00` during winter time).
 
 You can also run it manually from GitHub Actions using `workflow_dispatch`.
 

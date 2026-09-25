@@ -11,11 +11,22 @@ portfolio:
   execution_style: "长期观察、低频决策；集中于少数高赔率机会，分批建仓、分批止盈，保留恐慌期现金。"
 
 email_layout:
-  max_actionable_signals: 4
+  compact_digest: true
+  max_highlights: 3
+  highlight_excluded_tickers: [JD, NIO, IQ, 3690.HK]
+  max_actionable_signals: 3
   show_eight_gate_review: false
   show_not_expanded_today: false
   show_experience_reminders: false
   show_static_explanations: false
+  show_sentiment_only_when_triggered: true
+  show_market_movers_only_when_actionable: true
+  show_china_only_when_actionable: true
+  show_market_scan_only_when_triggered: true
+  show_breakthrough_only_when_triggered: true
+  show_market_temperature: false
+  show_additional_watch: false
+  show_influencer_radar: false
 
 data_fetch:
   provider: Yahoo Finance via yfinance
@@ -127,6 +138,35 @@ market_sentiment_framework:
 advisor_research:
   enabled: true
   mandate: "不是预测每天涨跌，而是在长期主线中识别基本面、资金流、信用周期和叙事之间的错误定价；用等待、分批与失效纪律提高赔率。"
+  structural_disruption_standard:
+    enabled: true
+    name: "结构性替代型龙头 / Structural category creator"
+    principle: "优先寻找拥有短期难复制的系统能力、正在替代旧产品或旧利润池、已经形成行业领导地位、且成功后可获得巨大增量利润池的公司。创新本身不够，必须看到商业兑现。"
+    uniqueness_test: "不是字面上的全球只有一家能做，而是竞争者在未来3-5年内难以同时复制其技术、成本、规模、数据、生态、渠道、监管资质或供应链。"
+    gates:
+      - "独占能力：明确写出客户为什么不能轻易换供应商；至少两项结构性壁垒有证据。"
+      - "旧体系替代：公司不是只分享行业增长，而是在让原有产品、流程或利润池失去吸引力。"
+      - "领导地位：市场份额、装机量、开发者/用户生态、订单或客户依赖已证明它是领导者。"
+      - "利润池迁移：收入、毛利、FCF或订单显示价值正在从旧体系转移到该公司，而不只是概念。"
+      - "可持续性：优势预计至少维持一个产业周期；监管、客户自研、替代技术和资本开支不会轻易推翻它。"
+    hard_rejects:
+      - "只有新技术演示，没有规模化交付、单位经济或现金流。"
+      - "产品可被大型客户自研或竞争者在短期内复制，转换成本低。"
+      - "行业增长很快，但公司没有份额、定价权或生态优势。"
+      - "公司确实优秀，但当前估值已透支大部分成功情景。"
+    price_rule: "公司质量评分与买点评分分开。即使五项全部通过，也必须等待估值折扣、恐慌回撤或盈利上修快于股价；不追高。"
+    tier_a_priority_tickers: [ASML.AS, NVDA, SPCX, 3750.HK, 300750.SZ, TSM, 2330.TW, AXON]
+    tier_b_watch_tickers: [AAPL, PDD, PLTR, AVGO, MSFT, BYDDY, 1211.HK, 603489.SS]
+    candidate_notes:
+      ASML.AS: "严格符合：EUV是先进制程关键瓶颈，短期不可复制；主要风险是半导体周期、出口管制和客户CapEx。"
+      NVDA: "高度符合：CUDA、芯片、网络和软件组成全栈生态，正在替代CPU中心计算；并非无人能做，需监控ASIC、AMD和客户自研。"
+      SPCX: "高度符合但高风险：可复用发射、Starlink和垂直整合动摇传统发射与连接；需验证重CapEx、Starship执行和AI投入回报。"
+      3750.HK: "高度符合：动力电池与储能规模、研发、客户和供应链共同构成壁垒，推动燃油体系电动化；需监控价格战、地缘和技术替代。"
+      TSM: "高度符合：先进制程、良率、规模与先进封装形成难复制组合；属于关键基础设施，替代性强于颠覆性。"
+      AXON: "较强符合：TASER、传感器、Evidence云和AI工作流形成公共安全操作系统；需监控高估值、政府采购周期和竞争。"
+      AAPL: "历史上严格符合；当前更多是生态与现金流护城河，除非新产品再次创造类别，否则只列二级观察。"
+      PDD: "替代逻辑强，但技术并非独占；优势来自组织效率、供给和流量模型，需持续验证Temu经济性、监管和利润率。"
+      603489.SS: "八方受益于自行车电动化且是领先供应商，但并非唯一方案，欧洲还有Bosch、Shimano等强敌，因此列二级观察。"
   portfolio_architecture:
     blue_chip_golden_pit: "最高优先级；大盘龙头/蓝筹被宏观、监管、AI CapEx、周期或短期业绩误读错杀，但现金流、竞争地位和先行指标未坏时，可给比高弹性小票更有意义的仓位。"
     core: "现金流强、可低频复利的龙头；优先腾讯、MSFT及高质量AI卖铲人。"
@@ -249,8 +289,10 @@ market_scan:
   max_themes_in_email: 3
   min_relative_strength_20d_pct: 1.5
   early_relative_strength_20d_pct: 0.5
-  candidate_max_1y_position: 0.65
-  candidate_min_5d_pct: -2.0
+  candidate_max_1y_position: 0.35
+  candidate_min_5d_pct: -5.0
+  candidate_max_5d_pct: 3.0
+  candidate_max_20d_pct: 8.0
   note: "赛道强势只说明资金正在交易它；候选股还必须没有处于一年高位附近，并且没有明显逆势破位。扫描结果是研究优先级，不是买入指令。"
   tracks:
     - name: AI利润兑现与卖铲人
@@ -284,6 +326,41 @@ market_scan:
       candidates: [0700.HK, BABA, 9988.HK, PDD, 3690.HK]
       required_checks: "确认盈利预期不再下修、竞争稳定、回购/FCF和中国消费数据改善。"
 
+confirmed_add_scan:
+  enabled: true
+  benchmark_by_region:
+    US: QQQ
+    Europe: VGK
+    Hong Kong: ^HSI
+    Korea: ^KS11
+  base_days: 10
+  prior_low_lookback_days: 50
+  min_advance_from_prior_low_pct: 10.0
+  max_advance_from_prior_low_pct: 35.0
+  max_base_range_pct: 10.0
+  min_base_floor_above_prior_low_pct: 5.0
+  max_down_volume_vs_prior_avg: 0.90
+  min_up_vs_down_volume_ratio: 1.05
+  higher_low_tolerance_pct: 1.0
+  min_relative_strength_10d_pct: 0.0
+  max_1y_position: 0.70
+  min_drawdown_from_1y_high_pct: -10.0
+  max_20d_gain_pct: 25.0
+  min_technical_passes: 5
+  max_candidates_per_email: 3
+  show_near_misses: false
+  fundamental_gate_stale_after_days: 45
+  fundamental_gates:
+    9988.HK:
+      as_of: "2026-09-25"
+      status: review
+      note: "云收入和AI产品收入强劲，但集团利润显著下降且近期配股融资；确认稀释、CapEx回报和利润拐点后才允许加仓。"
+    1810.HK:
+      as_of: "2026-09-25"
+      status: blocked
+      note: "集团收入、调整后利润和手机出货同比下降，汽车/AI新业务仍亏损；技术形态不能替代盈利企稳。"
+  principle: "低位首仓之后，只在价格形成更高平台、回调缩量、上涨量占优、低点抬高并跑赢QQQ时考虑加仓。加仓必须小于首仓，且最新基本面、信用和估值空间仍通过人工复核。"
+
 elite_franchise_reset_watch:
   enabled: true
   min_drawdown_from_1y_high_pct: -20.0
@@ -292,7 +369,7 @@ elite_franchise_reset_watch:
   seller_exhaustion_volume_ratio: 0.8
   buyer_confirmation_daily_pct: 1.0
   buyer_confirmation_volume_ratio: 1.3
-  max_candidates_per_email: 4
+  max_candidates_per_email: 2
   principle: "旗舰资产大跌是研究机会，不是自动加仓理由。先区分主动抛售、卖压衰竭和买方确认；只在各自关键基本面未破时分批。"
   groups:
     - name: 美股七姐妹 / Magnificent Seven
@@ -312,7 +389,7 @@ elite_franchise_reset_watch:
 
 breakthrough_product_watch:
   enabled: true
-  show_daily: true
+  show_daily: false
   principle: "划时代产品决定长期空间；只有需求、量产、单位经济和现金流依次得到验证，才把技术叙事升级为盈利重估。"
   max_rows: 2
   assets:
@@ -345,11 +422,16 @@ breakthrough_product_watch:
 
 market_mover_watch:
   enabled: true
-  send_daily_email: true
+  send_daily_email: false
   external_only: false
-  max_rows: 10
-  external_max_rows: 5
-  note: "全球高流动性龙头精选榜；用于发现异常资金流，不直接产生交易指令。"
+  max_rows: 5
+  external_max_rows: 3
+  min_abs_daily_move_pct: 4.0
+  min_abnormal_volume_ratio: 1.8
+  abnormal_volume_min_move_pct: 2.5
+  deep_reset_drawdown_pct: -20.0
+  deep_reset_daily_drop_pct: -2.0
+  note: "只显示达到异常涨跌、异常成交量或深回撤条件的全球龙头；普通排名不占邮件篇幅。"
   universe:
     - {ticker: AAPL, name: Apple, region: US, style: "Mega-cap technology"}
     - {ticker: MSFT, name: Microsoft, region: US, style: "AI cash compounder"}
@@ -432,6 +514,15 @@ global_rules:
   rotation_buy_5d_drop_pct: -8.0
   rotation_buy_near_low_years: 1
   rotation_buy_near_low_tolerance_pct: 5.0
+  buy_max_1y_position: 0.35
+  buy_max_5d_gain_pct: 3.0
+  buy_max_20d_gain_pct: 8.0
+  buy_min_drawdown_from_1y_high_pct: -15.0
+  early_value_max_1y_position: 0.25
+  early_value_max_5d_pct: -5.0
+  early_value_daily_drop_pct: -3.0
+  daily_watch_min_abs_move_pct: 2.5
+  daily_watch_min_volume_ratio: 1.5
 
 rotation_engine:
   enabled: true
